@@ -22,8 +22,8 @@
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){:root{
-  --bg:#262624;--surface:#30302e;--sunk:#3a3a37;--line:#45443f;--fg:#f0eee6;--muted:#a8a69c;
-  --accent:#3fc163;--accent-fg:#06200d;--accent-soft:#163020;--blue:#6aa5ec;--blue-soft:#1a2c42;--brand:#3fc163;--adr:#e2463e;
+  --bg:#1b1d1f;--surface:#26292c;--sunk:#303438;--line:#3c4146;--fg:#eceeef;--muted:#a3a9ae;
+  --accent:#2f7d5e;--accent-fg:#fff;--accent-soft:#1d352b;--blue:#6aa5ec;--blue-soft:#1a2c42;--brand:#3fc163;--adr:#e2463e;
   --full:#6cc48f;--full-bg:#16301f;--empty:#e0c47a;--empty-bg:#33290f;--warn:#e6a64a;--warn-bg:#3a2c12;color-scheme:dark}}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
@@ -147,7 +147,8 @@ html.wide .plcol .legs{display:flex;flex-direction:column;gap:10px;grid-template
 .plcol .carcard{cursor:default;border-top:4px solid var(--accent);border-left:1px solid var(--line)}
 @media (max-width:1250px){.plcols{grid-template-columns:1fr}}
 .sttable{padding:0;overflow-x:auto}
-.strow{display:grid;grid-template-columns:minmax(300px,2.2fr) 150px 90px 170px 170px 170px 170px 90px;gap:12px;align-items:center;padding:14px 18px;border-top:1px solid var(--line);font-size:14.5px;min-width:1250px}
+.strow{display:grid;grid-template-columns:minmax(230px,2.3fr) 140px 80px minmax(110px,1fr) minmax(110px,1fr) minmax(110px,1fr) minmax(110px,1fr) 80px;gap:10px;align-items:center;padding:12px 14px;border-top:1px solid var(--line);font-size:13.5px}
+@media (max-width:1500px){.strow{min-width:1150px}}
 .strow.sthead{border-top:0;font-size:12.5px;font-weight:700;color:var(--muted);background:var(--sunk);position:sticky;top:0}
 .strow[data-stedit]{cursor:pointer}.strow[data-stedit]:hover{background:var(--sunk)}
 .strow .r{text-align:right}
@@ -819,6 +820,7 @@ async function saveStat(){const st=S.bundle.status;
   const r=await fetch(GH+st.repo+"/contents/plan/_stationer/all.json",{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify(body)});if(!r.ok)throw new Error("put "+r.status);S.statSha=(await r.json()).content.sha}
 const STS={b24:["Byt inom 24 h","red"],b48:["Byt inom 2 dygn","yel"],ok:["Räcker","grn"],none:["Ingen avläsning","gry"]};
 const fmtDT=d=>DAYS[d.getDay()].slice(0,3)+" "+d.getDate()+" "+MON[d.getMonth()]+" "+d.getFullYear()+", "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+const sd=v=>v?String(v).replace(/ 20\d\d/,""):"—";
 const kgS=n=>n==null?"–":String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g," ")+" kg";
 const barCls=b=>b<21?"red":b<80?"yel":"grn";
 function statOrder(a,b){const r={b24:0,b48:1,ok:2,none:3};if(r[a.status]!==r[b.status])return r[a.status]-r[b.status];const h=x=>x.kvar&&x.perDygn?x.kvar/x.perDygn:1e9;return h(a)-h(b)}
@@ -842,7 +844,7 @@ function renderStat(){
    list.map(x=>{const st=STS[x.status]||STS.none;
     return '<div class="strow" data-stedit="'+esc(x.id)+'" role="button" tabindex="0"><span class="stn"><b class="stname">'+esc(x.name)+'</b>'+(x.tag?'<span class="tag">'+esc(x.tag)+'</span>':'')+
      '<span class="pills2">'+x.places.map((b,i)=>'<i class="bp '+barCls(b)+'"><u></u>'+(i+1)+' <b>'+b+'</b> bar</i>').join("")+(x.lager!=null?'<i class="bp '+(x.lager<200?'red':'grn')+'"><u></u>Lager <b>'+x.lager+'</b> bar</i>':'')+'</span></span>'+
-     '<span class="sts '+st[1]+'"><u></u><b>'+esc(st[0])+'</b></span><span class="r">'+esc(x.kvar==null?"—":kgS(x.kvar))+'</span><span>'+esc(x.avlast||"—")+(x.src?'<br><small class="muted">'+esc(x.src)+'</small>':'')+'</span><span>'+esc(x.normal||"—")+'</span><span>'+esc(x.hog||"—")+'</span><span>'+esc(x.forsta||"—")+'</span><span class="r">'+esc(kgS(x.perDygn||null))+'</span></div>'}).join("")+'</div>';
+     '<span class="sts '+st[1]+'"><u></u><b>'+esc(st[0])+'</b></span><span class="r">'+esc(x.kvar==null?"—":kgS(x.kvar))+'</span><span>'+esc(sd(x.avlast))+(x.src?'<br><small class="muted">'+esc(x.src)+'</small>':'')+'</span><span>'+esc(sd(x.normal))+'</span><span>'+esc(sd(x.hog))+'</span><span>'+esc(sd(x.forsta))+'</span><span class="r">'+esc(kgS(x.perDygn||null))+'</span></div>'}).join("")+'</div>';
   h+='<p class="muted" style="font-size:13px">'+esc(STAT_SRC)+' Klicka på en station för att läsa av.</p>';
   return h}
 function isOv(){return !!S.bundle&&(S.bundle.role==="admin"||S.bundle.role==="ekonomi")}
