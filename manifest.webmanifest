@@ -1,6 +1,6 @@
 {
-  "name": "Min rutt – Smålands Gastransport",
-  "short_name": "Min rutt",
+  "name": "Transport Planering – Smålands Gastransport",
+  "short_name": "Transport",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

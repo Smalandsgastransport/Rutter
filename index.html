@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Min rutt</title>
+<title>Transport Planering</title>
 <meta name="theme-color" content="#00932a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Min rutt">
+<meta name="apple-mobile-web-app-title" content="Transport Planering">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
 <style>
 :root{
-  --bg:#f2f4f6;--surface:#fff;--sunk:#e7ebef;--line:#d2d9e0;--fg:#17202a;--muted:#566473;
+  --bg:#faf9f5;--surface:#fff;--sunk:#f0eee6;--line:#e5e2d8;--fg:#1f1e1d;--muted:#6b6a64;
   --accent:#00932a;--accent-fg:#fff;--accent-soft:#e2f4e5;--blue:#1f5fa8;--blue-soft:#e1ebf7;--brand:#00aa13;--adr:#d7261e;
   --full:#1d7a4a;--full-bg:#e1f2e8;--empty:#6b5a2a;--empty-bg:#f6eed6;--warn:#9a5b00;--warn-bg:#fdf0d6;
   --f-display:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
@@ -22,15 +22,15 @@
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){:root{
-  --bg:#10151b;--surface:#19212a;--sunk:#222b35;--line:#33404d;--fg:#e6ebf0;--muted:#9aa7b4;
+  --bg:#262624;--surface:#30302e;--sunk:#3a3a37;--line:#45443f;--fg:#f0eee6;--muted:#a8a69c;
   --accent:#3fc163;--accent-fg:#06200d;--accent-soft:#163020;--blue:#6aa5ec;--blue-soft:#1a2c42;--brand:#3fc163;--adr:#e2463e;
   --full:#6cc48f;--full-bg:#16301f;--empty:#e0c47a;--empty-bg:#33290f;--warn:#e6a64a;--warn-bg:#3a2c12;color-scheme:dark}}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
 body{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-.wrap{max-width:820px;margin:0 auto;padding-block:16px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:14px}
+.wrap{max-width:1000px;margin:0 auto;padding-block:16px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:14px}
 h1,h2,h3{font-family:var(--f-display);margin:0;font-weight:700}
-h1{font-size:28px;line-height:1.1}
+h1{font-size:32px;line-height:1.1;letter-spacing:-.01em}
 button,a.btn{font:inherit;color:inherit}
 .top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .brand{display:flex;gap:12px;align-items:center}
@@ -42,7 +42,7 @@ button,a.btn{font:inherit;color:inherit}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
 .btn.small{min-height:38px;padding:6px 12px;font-size:14.5px}
 .btn:disabled{opacity:.5}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .muted{color:var(--muted)}
 .chips{display:flex;gap:8px;flex-wrap:wrap}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 14px;font-weight:600;min-height:40px;cursor:pointer}
@@ -54,7 +54,7 @@ button,a.btn{font:inherit;color:inherit}
 .stat .v{font-family:var(--f-display);font-size:24px;font-weight:700}
 .reg{font-weight:700;letter-spacing:.06em;border:1.5px solid var(--fg);border-radius:4px;padding:0 6px;font-size:14px}
 .legs{display:flex;flex-direction:column;gap:12px}
-.leg{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.leg{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:0 1px 2px rgba(0,0,0,.04);display:flex;flex-direction:column;gap:10px}
 .legtop{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .n{font-family:var(--f-display);font-size:24px;font-weight:700}
 .pills{display:flex;gap:6px;flex-wrap:wrap}
@@ -82,7 +82,19 @@ button,a.btn{font:inherit;color:inherit}
 .login label{display:flex;flex-direction:column;gap:6px;font-size:14.5px;color:var(--muted)}
 .login input{font:inherit;font-size:18px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--fg)}
 .login input:focus{outline:2px solid var(--accent);outline-offset:1px}
-.minilogo{height:34px;width:auto}
+.minilogo{height:64px;width:auto}
+.top{padding:10px 0 14px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.brand{gap:18px}.brand p{font-size:15px}
+.chip{min-height:44px;padding:8px 18px;font-size:16px}
+html.wide .wrap{max-width:1360px;padding-left:max(32px,env(safe-area-inset-left,0px));padding-right:max(32px,env(safe-area-inset-right,0px));gap:18px}
+html.wide h2{font-size:28px}
+html.wide .card{padding:24px}
+html.wide .stat .v{font-size:32px}
+html.wide .legs{display:grid;grid-template-columns:repeat(auto-fill,minmax(520px,1fr));gap:16px}
+html.wide .ov-car{padding:24px}
+html.wide table{font-size:16px}
+html.wide #main{display:flex;flex-direction:column;gap:18px}
+@media (min-width:1100px){html.wide .minilogo{height:76px}}
 html.out,html.out body{background:var(--surface)}
 .btn.big{min-height:58px;font-size:18px;width:100%}
 .btn.go{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
@@ -105,7 +117,7 @@ html.out,html.out body{background:var(--surface)}
 <body>
 <div class="wrap" id="app">
   <div class="top" id="topbar">
-    <div class="brand"><img class="minilogo" src="logo.svg" alt="Smålands Gastransport"><div><h1>Min rutt</h1><p id="sub">Laddar…</p></div></div>
+    <div class="brand"><img class="minilogo" src="logo.svg" alt="Smålands Gastransport"><div><h1>Transport Planering</h1><p id="sub">Laddar…</p></div></div>
     <div class="acts"><button class="btn small" id="refresh">Uppdatera</button><button class="btn small" id="switch" hidden>Byt bil</button></div>
   </div>
   <div id="main"></div>
@@ -596,7 +608,7 @@ function render(){
   $("#switch").hidden=!S.sess;$("#switch").textContent="Logga ut";
   $("#status").textContent=S.cars?((S.offline?"Utan nät – visar senast hämtade. ":"")+"Senast publicerad "+new Date(S.cars.updated).toLocaleString("sv-SE",{dateStyle:"short",timeStyle:"short"})+"."):"";
   if(!S.cars){$("#topbar").hidden=false;$("#sub").textContent="";M.innerHTML=S.busy?'<div class="card muted">Hämtar…</div>':'<div class="card">Kunde inte nå appen. Kontrollera nätet och tryck Uppdatera.</div>';return}
-  document.documentElement.classList.toggle("out",!S.sess);
+  document.documentElement.classList.toggle("out",!S.sess);document.documentElement.classList.toggle("wide",isOv());
   if(!S.sess){
     $("#topbar").hidden=true;$("#status").hidden=true;
     if(!M.querySelector("#loginForm")){
@@ -611,7 +623,7 @@ function render(){
   const car=(S.bundle&&S.bundle.car)||{name:""};
   $("#sub").textContent=S.bundle&&S.bundle.role==="admin"?"Översikt":S.bundle&&S.bundle.role==="ekonomi"?"Sammanställning":(car.name||"");
   if(!S.bundle){M.innerHTML='<div class="card muted">'+(S.err?esc(S.err):'Hämtar rutten…')+'</div>';return}
-  if(isOv()){const tabs=S.bundle.role==="admin"?'<div class="chips"><button class="chip" data-view="ov"'+(S.view!=="sum"?' aria-current="date"':'')+'>Dagsöversikt</button><button class="chip" data-view="plan"'+(S.view==="plan"?' aria-current="date"':'')+'>Planering</button><button class="chip" data-view="sum"'+(S.view==="sum"?' aria-current="date"':'')+'>Sammanställning</button></div>':'';
+  if(isOv()){const tabs=S.bundle.role==="admin"?'<div class="chips"><button class="chip" data-view="ov"'+(S.view==="ov"?' aria-current="date"':'')+'>Dagsöversikt</button><button class="chip" data-view="plan"'+(S.view==="plan"?' aria-current="date"':'')+'>Planering</button><button class="chip" data-view="sum"'+(S.view==="sum"?' aria-current="date"':'')+'>Sammanställning</button></div>':'';
     M.innerHTML=tabs+(S.bundle.role==="ekonomi"||S.view==="sum"?renderSum():S.view==="plan"?renderPlan():renderAdmin());return}
   const ds=days();let h='';
   if(ds.length)h+='<div class="chips">'+ds.map(d=>'<button class="chip" data-date="'+d+'"'+(d===S.date?' aria-current="date"':'')+'>'+esc(dayLabel(d))+' <span>'+S.bundle.days[d].legs.length+' st</span></button>').join("")+'</div>';
