@@ -260,10 +260,10 @@ async function loadBundle(){
 async function afterLoad(){
   if(!S.bundle)return;
   if(window.ARKIV)return akLoad();
-  if(S.bundle.role==='admin'){await loadPlansAdmin();await loadNotes();await loadPauser();await loadSwaps();await loadLedig();await loadStat();
+  if(S.bundle.role==='admin'){await loadPlansAdmin();await loadNotes();await loadPauser();await loadSwaps();await loadLedig();await loadStat();if(S.view==='ark')arLoad().then(()=>render());
     const ds=[...new Set([today(),iso(new Date(Date.now()+864e5)),S.pl.date||today(),S.date].filter(Boolean))];
     await Promise.all((S.bundle.planCars||[]).filter(c=>c.dir).map(async c=>{for(const d of (S.view==='paus'?[...new Set(ds.concat(pausDays()))]:ds)){await ghList(c.dir,d);await fetchNy(c.dir,d)}}))}
-  else if(S.bundle.role==='driver'){await loadPlansDriver();await loadNotes();await loadPauser();await loadSwaps();await loadLedig();await loadPeerPlans();for(const d of [today(),iso(new Date(Date.now()-864e5))]){await ghList(S.bundle.dir,d);await fetchNy(S.bundle.dir,d)}}
+  else if(S.bundle.role==='driver'){await loadPlansDriver();await loadNotes();await loadPauser();await loadSwaps();await loadLedig();await loadPeerPlans();dkHist().then(()=>render());for(const d of [today(),iso(new Date(Date.now()-864e5))]){await ghList(S.bundle.dir,d);await fetchNy(S.bundle.dir,d)}}
   if(isOv()){const all=S.bundle.role==="ekonomi"||S.view==="sum";await Promise.all(S.bundle.cars.map(async c=>{for(const d of (all?Object.keys(c.days):(S.date?[S.date]:[]))){await ghList(c.dir,d);await fetchNy(c.dir,d)}}));return}
   await sync();if(S.date){await ghList(S.bundle.dir,S.date);await fetchNy(S.bundle.dir,S.date)}
 }
@@ -732,6 +732,68 @@ document.addEventListener("click",async e=>{
 });
 function dkBadge(){const n=S.dk.n,t=S.dk.total;if(!t)return "";return '<p class="'+(n>=t?"":"warn ")+'muted" style="margin:0;font-size:14px">'+(n>=t?'✓ Alla '+t+' deklarationer är sparade på den här enheten och fungerar utan nät.':'Sparar deklarationer på enheten… '+n+' av '+t)+'</p>'}
 
+/* ---------- Arkiv per bil (förare) och alla bilar (kontoret) ---------- */
+function pdfOverlay(blob,name,extra){
+  const old=document.getElementById("pdfov");if(old){old.querySelectorAll("[data-u]").forEach(x=>URL.revokeObjectURL(x.dataset.u));old.remove()}
+  const u=URL.createObjectURL(blob),o=document.createElement("div");o.id="pdfov";o.style.cssText="position:fixed;inset:0;z-index:70;background:var(--bg);display:flex;flex-direction:column;padding:12px;gap:8px";
+  o.innerHTML='<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap"><b>'+esc(name)+'</b><span class="acts"><a class="btn" href="'+u+'" target="_blank" style="text-decoration:none">Öppna i helskärm</a><a class="btn" href="'+u+'" download="'+esc(name)+'" style="text-decoration:none">Spara</a><button class="btn" data-pv="close">Stäng</button></span></div><iframe data-u="'+u+'" src="'+u+'" style="flex:1;border:0;background:#fff;border-radius:4px"></iframe>';
+  document.body.appendChild(o)}
+document.addEventListener("click",e=>{const t=e.target.closest("[data-pv]");if(t){const o=document.getElementById("pdfov");if(o){o.querySelectorAll("[data-u]").forEach(x=>URL.revokeObjectURL(x.dataset.u));o.remove()}}});
+const histOld=d=>d<=iso(new Date(Date.now()-2*864e5));
+async function histFetch(dir,dates){for(const d of dates){const k="hist:"+dir+"|"+d;if(store.get(k))continue;await ghList(dir,d);await fetchNy(dir,d);if(histOld(d)&&(S.server[dir+"|"+d]||[]).length)store.set(k,"1")}}
+/* förare: eget arkiv, sparas på enheten */
+const dkIdx=()=>{try{return JSON.parse(store.get("dkarch:"+S.bundle.dir)||"{}")}catch(e){return {}}};
+async function dkHist(){
+  if(S.dk.hbusy||!S.bundle||S.bundle.role!=="driver"||!S.bundle.planKey)return;S.dk.hbusy=true;
+  try{const dir=S.bundle.dir,ps=await fetchPlans(dir,"2020-01-01"),t=today(),idx=dkIdx();
+    for(const d of Object.keys(ps).sort()){if(d>t)continue;const p=ps[d];if(!p.legs||!p.legs.length)continue;
+      await histFetch(dir,[d]);const r=planToRoute(p),st=statesFor(dir,d);
+      for(const l of allLegs(dir,d,r.legs)){if(l.deleted||!st.get(l.order+"|lossad"))continue;
+        const key=dir+"|"+d+"|"+l.order,sg=dkSig(l,r);
+        if(!idx[key]||idx[key].sig!==sg){try{await dkKv(key,{sig:sg,blob:await dkBlob(l,r)})}catch(e){continue}}
+        idx[key]={date:d,order:l.order,from:l.from.name,to:l.to.name,load:l.load,antal:l.antal,mangd:l.mangd,kg:l.kg||null,sig:sg}}}
+    store.set("dkarch:"+dir,JSON.stringify(idx))}catch(e){}
+  finally{S.dk.hbusy=false}}
+function arkCard(){
+  if(!(S.bundle&&S.bundle.role==="driver"))return "";const n=Object.keys(dkIdx()).length;
+  return '<div class="card" style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div><b>Mina körda deklarationer</b><div class="muted" style="font-size:14px">'+n+' sparade på den här enheten</div></div><button class="btn" data-dk="arch">Öppna arkivet</button></div>'}
+async function dkArch(){
+  dkClose();const idx=dkIdx(),keys=Object.keys(idx).sort((a,b)=>idx[b].date.localeCompare(idx[a].date)||idx[b].order.localeCompare(idx[a].order));
+  const o=document.createElement("div");o.id="dkview";o.style.cssText="position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column;padding:12px;gap:10px;overflow:auto";
+  const kg=keys.reduce((a,k)=>a+(idx[k].kg||0),0),days=new Set(keys.map(k=>idx[k].date)).size;
+  let last="";
+  o.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:19px">Mina körda deklarationer</b><button class="btn" data-dk="close">Stäng</button></div><div class="muted" style="font-size:14px">'+keys.length+' transporter · '+days+' dagar'+(kg?' · '+sp(kg)+' kg gas':'')+' · sparade på enheten, fungerar utan nät</div><input id="dkq" placeholder="Sök på datum, plats eller order…" style="font:inherit;font-size:16px;padding:10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg)"><div id="dkl" style="display:flex;flex-direction:column;gap:8px">'+
+    (keys.length?keys.map(k=>{const x=idx[k];let h="";if(x.date!==last){last=x.date;h='<div class="muted dkd" style="font-weight:600;margin-top:8px">'+esc(dayLabel(x.date))+'</div>'}
+      return h+'<button class="card dkr" data-dk="ashow" data-k="'+esc(k)+'" data-q="'+esc((x.date+" "+x.from+" "+x.to+" "+x.order).toLowerCase())+'" style="text-align:left;display:flex;justify-content:space-between;gap:10px;margin:0;padding:12px 14px;cursor:pointer"><span><b>'+esc(x.from)+' → '+esc(x.to)+'</b><br><span class="muted" style="font-size:13.5px">'+esc(x.order)+(x.mangd?' · '+esc(x.mangd):'')+'</span></span><span class="muted">Visa ›</span></button>'}).join(""):'<div class="card muted">Inga körda transporter sparade än.</div>')+'</div>';
+  document.body.appendChild(o)}
+document.addEventListener("click",async e=>{const t=e.target.closest("[data-dk]");if(!t)return;
+  if(t.dataset.dk==="arch"){await dkArch();return}
+  if(t.dataset.dk==="ashow"){const k=t.dataset.k;let en=null;try{en=await dkKv(k)}catch(x){}
+    if(!en||!en.blob){toast("Filen finns inte sparad på enheten än.");return}pdfOverlay(en.blob,k.split("|")[2]+".pdf")}});
+document.addEventListener("input",e=>{if(e.target.id!=="dkq")return;const q=e.target.value.trim().toLowerCase();document.querySelectorAll(".dkr").forEach(b=>b.hidden=!!q&&b.dataset.q.indexOf(q)<0)});
+/* kontor: alla bilar */
+S.ar={car:"all",rows:[],busy:false};
+async function arLoad(){
+  if(S.ar.busy||!S.bundle||S.bundle.role!=="admin")return;S.ar.busy=true;
+  try{for(const pc of (S.bundle.planCars||[])){if(!pc.dir)continue;
+      const ds=Object.keys(S.plans).filter(k=>k.indexOf(pc.dir+"|")===0).map(k=>k.slice(pc.dir.length+1)).filter(d=>d<=today());await histFetch(pc.dir,ds)}}catch(e){}
+  S.ar.busy=false;S.ar.rows=akItems()}
+function renderArk(){
+  const A=S.ar,cars=S.bundle.planCars||[],rows=(A.rows||[]).slice().reverse(),vis=A.car==="all"?rows:rows.filter(x=>x.dir===(cars.find(c=>c.id===A.car)||{}).dir);
+  let h='<div class="pagehead"><h2>Arkiv</h2><p class="muted">Alla körda deklarationer för alla bilar. Samma deklarationer ligger sparade i varje förares app.</p></div>';
+  h+='<div class="tiles">'+cars.map(c=>{const r=rows.filter(x=>x.dir===c.dir),kg=r.reduce((a,x)=>a+(x.leg.kg||0),0),dd=new Set(r.map(x=>x.date)).size;return '<div class="tile"><span class="k">'+esc(c.name)+(c.driver?' · '+esc(c.driver.split(" ")[0]):'')+'</span><span class="v">'+r.length+' <small>transporter</small></span><span class="muted" style="font-size:13px">'+dd+' dagar'+(kg?' · '+sp(kg)+' kg':'')+'</span></div>'}).join("")+'</div>';
+  h+='<div class="card" style="margin-top:14px"><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;align-items:center"><div class="chips"><button class="chip" data-ar="car" data-c="all"'+(A.car==="all"?' aria-current="date"':'')+'>Alla bilar</button>'+cars.map(c=>'<button class="chip" data-ar="car" data-c="'+c.id+'"'+(A.car===c.id?' aria-current="date"':'')+'>'+esc(c.name)+'</button>').join("")+'</div><button class="btn small" data-ar="csv">Exportera data (CSV)</button></div>'+
+    (A.busy?'<p class="muted">Hämtar…</p>':'')+
+    '<div style="overflow:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr class="muted" style="text-align:left"><th>Datum</th><th>Bil</th><th>Order</th><th>Från → Till</th><th>Mängd</th><th>kg</th><th></th></tr></thead><tbody>'+
+    (vis.length?vis.map(x=>'<tr style="border-top:1px solid var(--line)"><td>'+esc(x.date)+'</td><td>'+esc(x.car)+'</td><td>'+esc(x.leg.order)+'</td><td>'+esc(x.leg.from.name)+' → '+esc(x.leg.to.name)+'</td><td>'+esc(x.leg.mangd||"")+'</td><td>'+(x.leg.kg?sp(x.leg.kg):"")+'</td><td><button class="btn link" data-ar="open" data-i="'+rows.indexOf(x)+'">Öppna</button></td></tr>').join(""):'<tr><td colspan="7" class="muted" style="padding:10px 0">Inga körda transporter än.</td></tr>')+'</tbody></table></div></div>';
+  return h}
+document.addEventListener("click",async e=>{const t=e.target.closest("[data-ar]");if(!t||!S.bundle)return;const a=t.dataset.ar;
+  if(a==="car"){S.ar.car=t.dataset.c;render();return}
+  if(a==="open"){const x=(S.ar.rows||[]).slice().reverse()[+t.dataset.i];if(x)try{pdfOverlay(await makePdf([x.leg],x.r),x.leg.order+".pdf")}catch(err){toast("Kunde inte skapa PDF:en.")}return}
+  if(a==="csv"){const q=v=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"',L=["Datum;Bil;Förare;Order;Från;Till;Last;Antal;Mängd;kg"];
+    (S.ar.rows||[]).forEach(x=>L.push([x.date,x.car,x.r.driver,x.leg.order,x.leg.from.name,x.leg.to.name,x.leg.load,x.leg.antal,x.leg.mangd,x.leg.kg?Math.round(x.leg.kg):""].map(q).join(";")));
+    const a2=document.createElement("a");a2.href=URL.createObjectURL(new Blob(["﻿"+L.join("\r\n")],{type:"text/csv"}));a2.download="kord-data-"+today()+".csv";document.body.appendChild(a2);a2.click();setTimeout(()=>{URL.revokeObjectURL(a2.href);a2.remove()},3000)}});
+
 /* ---------- Ledighetsansökan ---------- */
 const LT={semester:"Semester",ledig:"Ledig dag",foraldra:"Föräldraledighet",vab:"VAB",annat:"Annat"};
 S.led=[];S.ledSha=null;S.lv={form:null,m:null};
@@ -1091,20 +1153,20 @@ function render(){
   {const CP={bil1:["Hagelsrum","Arne Carlsson"],bil2:["Bor","Annelie Steen"],bil3:["Tånnö","Niklas Hellstrand"]},isDrv=S.bundle&&S.bundle.role==="driver",cp=isDrv&&CP[car.id];
    $("#ttl").textContent=isDrv?("Dagens rutt"+(cp?" – "+cp[0]:"")):"Transport Planering";
    if(isDrv){$("#sub").textContent=(car.name||"")+(cp?" · "+cp[1]:(car.driver?" · "+car.driver:""));}}
-  if(!(S.bundle&&S.bundle.role==="driver"))$("#sub").textContent=S.bundle&&S.bundle.role==="admin"?({ov:"Översikt",plan:"Planering",msg:"Meddelanden",paus:"Pauser",led:"Ledighet",stat:"Stationer",sum:"Sammanställning"}[S.view]||"Översikt"):S.bundle&&S.bundle.role==="ekonomi"?"Sammanställning":(car.name||"");
+  if(!(S.bundle&&S.bundle.role==="driver"))$("#sub").textContent=S.bundle&&S.bundle.role==="admin"?({ov:"Översikt",plan:"Planering",msg:"Meddelanden",paus:"Pauser",led:"Ledighet",ark:"Arkiv",stat:"Stationer",sum:"Sammanställning"}[S.view]||"Översikt"):S.bundle&&S.bundle.role==="ekonomi"?"Sammanställning":(car.name||"");
   if(!S.bundle){M.innerHTML='<div class="card muted">'+(S.err?esc(S.err):'Hämtar rutten…')+'</div>';return}
   if(isOv()){
     if(S.bundle.role==="ekonomi"){M.innerHTML='<div class="content">'+renderSum()+'</div>';return}
     const cnt=(S.bundle.planCars||[]).reduce((a,c)=>a+notisAll(c.dir,today()).length+notisAll(c.dir,iso(new Date(Date.now()+864e5))).length,0);
-    const items=[["ov","Översikt",cnt],["plan","Planering",0],["msg","Meddelanden",0],["stat","Stationer",0],["paus","Pauser",0],["led","Ledighet",S.led.filter(x=>x.status==="ny").length],["sum","Sammanställning",0]];
+    const items=[["ov","Översikt",cnt],["plan","Planering",0],["msg","Meddelanden",0],["stat","Stationer",0],["paus","Pauser",0],["ark","Arkiv",0],["led","Ledighet",S.led.filter(x=>x.status==="ny").length],["sum","Sammanställning",0]];
     const nav='<nav class="side"><div class="sidehd">Kontoret</div>'+items.map(([k,l,n])=>'<button data-view="'+k+'"'+(S.view===k?' aria-current="page"':'')+'><span>'+l+'</span>'+(n?'<i class="badge">'+n+'</i>':'')+'</button>').join("")+'</nav>';
-    M.innerHTML='<div class="shell">'+nav+'<div class="content">'+(S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'</div></div>';return}
+    M.innerHTML='<div class="shell">'+nav+'<div class="content">'+(S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ark"?renderArk():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'</div></div>';return}
   const ds=days();let h='';
   if(ds.length)h+='<div class="chips">'+ds.map(d=>'<button class="chip" data-date="'+d+'"'+(d===S.date?' aria-current="date"':'')+'>'+esc(dayLabel(d))+' <span>'+S.bundle.days[d].legs.length+' st</span></button>').join("")+'</div>';
   const r=route();
-  if(!r){M.innerHTML=h+'<div class="card" style="font-size:17px">Ingen rutt är utskickad till '+esc(car.name)+' just nu.</div><div style="margin-top:12px">'+newFormHtml(null)+'</div><div style="margin-top:12px">'+pausCard()+ledCard()+'</div>'+swapBanner();return}
+  if(!r){M.innerHTML=h+'<div class="card" style="font-size:17px">Ingen rutt är utskickad till '+esc(car.name)+' just nu.</div><div style="margin-top:12px">'+newFormHtml(null)+'</div><div style="margin-top:12px">'+pausCard()+arkCard()+ledCard()+'</div>'+swapBanner();return}
   if(S.changed)h+='<div class="notice warn">Rutten har ändrats sedan du senast tittade.</div>';
-  h+=driverNotesHtml(r);h+='<div>'+pausCard()+ledCard()+'</div>'+swapBanner();
+  h+=driverNotesHtml(r);h+='<div>'+pausCard()+arkCard()+ledCard()+'</div>'+swapBanner();
   const st=statesFor(S.bundle.dir,r.date),g=st.get("dag|godkand"),pc=pendingCount();
   h+='<div class="card" style="display:flex;flex-direction:column;gap:10px">'+(g?'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between"><span class="done'+(g.pending?' wait':'')+'">✓ Dagens ordrar godkända '+esc(hhmm(g.ts))+'</span><button class="btn link" data-undo="godkand" data-order="dag">Ångra</button></div>':'<button class="btn go big" data-act="godkand" data-order="dag">Godkänn dagens ordrar</button><p class="muted" style="margin:0;font-size:14.5px">Gå igenom transporterna nedan och godkänn innan du börjar köra.</p>')+
     (pc?'<p class="muted" style="margin:0;font-size:14px">'+pc+' tryck väntar på att skickas'+(S.bundle.status?' – skickas när nätet finns.':' – rapporteringen är inte inkopplad än.')+'</p>':'')+'</div>';
