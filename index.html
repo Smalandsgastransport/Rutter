@@ -408,7 +408,7 @@ function nyEvents(dir,date){
   return out.sort((a,b)=>a.ts-b.ts);
 }
 async function fetchNy(dir,date){const st=S.bundle.status;if(!st)return;
-  for(const n of (S.server[dir+"|"+date]||[])){const p=parseName(n);if(!p||(p.type!=="ny"&&p.type!=="lastad"&&p.type!=="notis"&&p.type!=="notislast"&&p.type!=="paus"&&p.type!=="pausslut")||S.nyData[n])continue;
+  for(const n of (S.server[dir+"|"+date]||[])){const p=parseName(n);if(!p||(p.type!=="ny"&&p.type!=="lastad"&&p.type!=="notis"&&p.type!=="notislast"&&p.type!=="andring"&&p.type!=="paus"&&p.type!=="pausslut")||S.nyData[n])continue;
     try{const r=await fetch(GH+st.repo+"/contents/status/"+date+"/"+dir+"/"+n,{headers:ghHeaders(st),cache:"no-store"});if(!r.ok)continue;const j=await r.json();S.nyData[n]=JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g,"")))))}catch(e){}}}
 /* ---------- Flaknummer vid Lastad ---------- */
 function kgGas(bar,L){const T=288.15,R=8.314462,Tc=190.564,Pc=45.99e5,w=0.0115,M=16.043e-3,P=(bar+1.01325)*1e5;
@@ -497,7 +497,7 @@ async function createDay(forDate){
   p=JSON.parse(JSON.stringify(p));
   p.legs.push({order:date.slice(2).replace(/-/g,"")+"-B"+String(c.id||"").replace(/\D/g,"")+"-E"+n,uppdrag:"Egen bokning",load:F.load,antal:F.antal,mangd:mg,note:(F.note||"").trim(),from:strip(from),to:strip(to)});
   p.next=n+1;p.updated=new Date().toISOString();
-  try{await ghPlanPut(B.dir,date,p)}catch(e){F.err="Kunde inte spara. Kontrollera nätet och försök igen.";render();return}
+  try{await ghPlanPut(B.dir,date,p);ackSet(date,planToRoute(p))}catch(e){F.err="Kunde inte spara. Kontrollera nätet och försök igen.";render();return}
   S.plans[k]=p;B.days[date]=planToRoute(p);S.date=date;S.newForm=null;render();toast("Bokningen är sparad och syns för kontoret.");
 }
 async function createLeg(){
@@ -634,7 +634,7 @@ function renderPlan(){
   const sel='style="font:inherit;font-size:17px;padding:10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg);width:auto"';
   if(!S.pl.car||!(B.planCars||[]).some(c=>c.id===S.pl.car))S.pl.car=((B.planCars||[])[0]||{}).id;
   let h='<h2>Planering</h2>'+'<div class="card" style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><label class="muted" style="font-size:14px">Dag <input type="date" id="pDate" value="'+esc(S.pl.date)+'" '+sel+'></label><button class="chip" data-pdate="0">Idag</button><button class="chip" data-pdate="1">Imorgon</button></div></div>';
-  h+=notisCard(S.pl.date)+swapAdminCard();
+  h+=notisCard(S.pl.date)+andringCard()+swapAdminCard();
   const keep=S.pl.car;
   h+='<div class="plcols">'+(B.planCars||[]).map(c=>{S.pl.car=c.id;try{return planCol(c,keep)}finally{S.pl.car=keep}}).join("")+'</div>';
   return h}
@@ -964,6 +964,46 @@ async function ensurePush(){
       const body={message:"F:",content:btoa(unescape(encodeURIComponent(JSON.stringify(arr))))};if(sha)body.sha=sha;
       const r=await fetch(url,{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify(body)});if(r.ok){store.set(k,String(Date.now()));return}}
   }catch(e){}}
+
+/* ---------- Godkänn / neka ändring i rutten ---------- */
+const ackKey=d=>"ack:"+S.bundle.dir+":"+d;
+const legSnap=r=>(r.legs||[]).map(l=>({o:l.order,f:l.from&&l.from.name||"",t:l.to&&l.to.name||"",l:l.load||"",a:l.antal||1,m:l.mangd||"",n:l.note||""}));
+const ackGet=d=>{try{return JSON.parse(store.get(ackKey(d))||"null")}catch(e){return null}};
+const ackSet=(d,r,res)=>store.set(ackKey(d),JSON.stringify({upd:String(r.updated),snap:legSnap(r),res:res||null}));
+function legDiff(a,b){const out=[],A=new Map(a.map(x=>[x.o,x])),B=new Map(b.map(x=>[x.o,x]));
+  const nm=x=>x.f+" → "+x.t+(x.m?" ("+x.m+")":"");
+  b.forEach(x=>{const y=A.get(x.o);if(!y){out.push("Ny transport: "+nm(x)+(x.n?" – "+x.n:""));return}
+    const c=[];if(y.f!==x.f||y.t!==x.t)c.push("sträcka "+y.f+" → "+y.t+" blir "+x.f+" → "+x.t);if(y.m!==x.m)c.push("mängd "+(y.m||"–")+" blir "+(x.m||"–"));if(y.a!==x.a)c.push("antal "+y.a+" blir "+x.a);if(y.l!==x.l)c.push("last "+y.l+" blir "+x.l);if(y.n!==x.n)c.push("kommentar ändrad"+(x.n?": "+x.n:""));
+    if(c.length)out.push("Ändrad transport "+nm(x)+": "+c.join(", "))});
+  a.forEach(y=>{if(!B.has(y.o))out.push("Borttagen: "+nm(y))});
+  const oa=a.filter(y=>B.has(y.o)).map(y=>y.o).join(),ob=b.filter(y=>A.has(y.o)).map(y=>y.o).join();if(!out.length&&oa!==ob)out.push("Ordningen på transporterna är ändrad");
+  return out}
+S.acNo=null;S.acText="";
+function readAc(){const g=document.getElementById("acText");if(g)S.acText=g.value}
+function changeCards(){
+  if(!(S.bundle&&S.bundle.role==="driver"&&S.pl0))return "";let h="";
+  Object.keys(S.bundle.days).sort().forEach(d=>{const r=S.bundle.days[d];if(!r||!r.legs||d<iso(new Date(Date.now()-864e5)))return;const a=ackGet(d);
+    if(!a){ackSet(d,r);return}
+    if(a.upd===String(r.updated)){if(a.res&&a.res.ok===false)h+='<div class="notice warn" style="margin-bottom:10px"><b>Du har nekat ändringen för '+esc(dayLabel(d))+'</b><br>'+esc(a.res.text||"")+'<br><span class="muted">Väntar på svar från kontoret.</span></div>';return}
+    const diff=legDiff(a.snap,legSnap(r));if(!diff.length){ackSet(d,r,a.res);return}
+    h+='<div class="notice warn" style="border-left:5px solid #c0392b;margin-bottom:10px"><b style="font-size:17px">Kontoret har ändrat rutten – '+esc(dayLabel(d))+'</b><ul style="margin:8px 0 8px 18px;padding:0">'+diff.map(x=>'<li>'+esc(x)+'</li>').join("")+'</ul>'+
+      (S.acNo===d?'<label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Varför kan du inte? (obligatoriskt)<textarea id="acText" rows="3" style="font:inherit;font-size:16px;padding:9px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg)">'+esc(S.acText)+'</textarea></label><div class="acts" style="margin-top:8px"><button class="btn go" data-ac="send" data-d="'+d+'">Skicka nej</button><button class="btn" data-ac="cancel">Avbryt</button></div>':
+      '<div class="acts"><button class="btn go" data-ac="ok" data-d="'+d+'">Godkänn ändringen</button><button class="btn" data-ac="no" data-d="'+d+'">Neka</button></div>')+'</div>'});
+  return h}
+async function recordFor(date,type,extra){const now=new Date(),name=now.getTime()+"_dag_"+type+".json",r=S.bundle.days[date]||{};
+  const q=queue();q.push({name,date,sent:false,data:Object.assign({typ:type,order:null,datum:date,tid:now.toISOString(),bil:S.bundle.car.name,forare:r.driver||""},extra||{})});saveQueue(q);render();await sync();render()}
+document.addEventListener("click",async e=>{const t=e.target.closest("[data-ac]");if(!t||!S.bundle)return;const a=t.dataset.ac,d=t.dataset.d,r=S.bundle.days[d];
+  if(a==="no"){S.acNo=d;S.acText="";render();return}
+  if(a==="cancel"){S.acNo=null;render();return}
+  if(a==="ok"&&r){ackSet(d,r,{ok:true});await recordFor(d,"andring",{upd:String(r.updated),ok:true,text:""});toast("Ändringen är godkänd.");return}
+  if(a==="send"&&r){readAc();if(!S.acText.trim()){toast("Skriv varför du inte kan.");return}const tx=S.acText.trim();S.acNo=null;ackSet(d,r,{ok:false,text:tx});await recordFor(d,"andring",{upd:String(r.updated),ok:false,text:tx});toast("Ditt svar är skickat till kontoret.")}});
+function andringAll(dir,date){const out=[];(S.server[dir+"|"+date]||[]).forEach(n=>{const p=parseName(n);if(!p||p.type!=="andring")return;const d=S.nyData[n];if(d)out.push({ts:p.ts,d,date})});return out}
+function andringCard(){
+  const ds=[...new Set([today(),iso(new Date(Date.now()+864e5)),S.pl&&S.pl.date].filter(Boolean))],rows=[];
+  (S.bundle.planCars||[]).forEach(c=>ds.forEach(d=>{const last=new Map();andringAll(c.dir,d).sort((a,b)=>a.ts-b.ts).forEach(x=>last.set(x.d.upd,x));last.forEach(x=>rows.push({c,x,d}))}));
+  if(!rows.length)return "";rows.sort((a,b)=>b.x.ts-a.x.ts);
+  return '<div class="card notis"><h3>Förarnas svar på ändrade rutter</h3>'+rows.slice(0,8).map(r=>'<div class="nrow"><span class="pill '+(r.x.d.ok?'p-full':'p-warn')+'">'+(r.x.d.ok?'Godkänt':'Nekat')+'</span><b>'+esc(r.c.name)+(r.c.driver?' · '+esc(r.c.driver.split(" ")[0]):'')+'</b><span>'+esc(dayLabel(r.d))+(r.x.d.text?' – '+esc(r.x.d.text):'')+'</span><span class="muted">'+esc(hhmm(new Date(r.x.ts).toISOString()))+'</span></div>').join("")+'</div>'}
+const andringNek=()=>{let n=0;(S.bundle.planCars||[]).forEach(c=>[today(),iso(new Date(Date.now()+864e5))].forEach(d=>{const last=new Map();andringAll(c.dir,d).sort((a,b)=>a.ts-b.ts).forEach(x=>last.set(x.d.upd,x));last.forEach(x=>{if(!x.d.ok)n++})}));return n};
 
 /* ---------- Ledighetsansökan ---------- */
 const LT={semester:"Semester",ledig:"Ledig dag",foraldra:"Föräldraledighet",vab:"VAB",annat:"Annat"};
@@ -1296,7 +1336,7 @@ function renderAdmin(){
   const ds=days(),B=S.bundle;let h='<div class="pagehead"><h2>Översikt</h2><p class="muted">Dagens körningar, status från förarna och aviseringar.</p></div>';
   {const D=S.date||today(),cs=B.cars.filter(c=>c.days[D]);let nL=0,nU=0,nG=0;cs.forEach(c=>{const st=statesFor(c.dir,D);if(st.get("dag|godkand"))nG++;allLegs(c.dir,D,c.days[D].legs.map(l=>Object.assign({},l,{from:{name:l.from},to:{name:l.to}}))).filter(l=>!l.deleted).forEach(l=>{nL++;if(st.get(l.order+"|lossad"))nU++})});
    const nn=(B.planCars||[]).reduce((a,c)=>a+notisUnread(c.dir,D).length,0);
-   h+='<div class="tiles"><div class="tile"><span class="k">Bilar utskickade</span><span class="v">'+cs.length+' <small>av '+((B.planCars||[]).length||3)+'</small></span></div><div class="tile"><span class="k">Godkända</span><span class="v">'+nG+' <small>av '+cs.length+'</small></span></div><div class="tile"><span class="k">Lossade</span><span class="v">'+nU+' <small>av '+nL+'</small></span></div><div class="tile'+(nn?' hot':'')+'"><span class="k">Aviseringar</span><span class="v">'+nn+'</span></div></div>'+notisCard(D)+swapAdminCard()}
+   h+='<div class="tiles"><div class="tile"><span class="k">Bilar utskickade</span><span class="v">'+cs.length+' <small>av '+((B.planCars||[]).length||3)+'</small></span></div><div class="tile"><span class="k">Godkända</span><span class="v">'+nG+' <small>av '+cs.length+'</small></span></div><div class="tile"><span class="k">Lossade</span><span class="v">'+nU+' <small>av '+nL+'</small></span></div><div class="tile'+(nn?' hot':'')+'"><span class="k">Aviseringar</span><span class="v">'+nn+'</span></div></div>'+notisCard(D)+andringCard()+swapAdminCard()}
   if("Notification" in window&&Notification.permission==="default")h+='<div class="notice" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>Få en avisering när en förare skickar något till kontoret.</span><button class="btn small" data-al="perm">Slå på aviseringar</button></div>';
   if(!B.status)h+='<div class="notice warn">Rapporteringen är inte inkopplad än. Godkänn, Lastad och Lossad syns här när den är klar.</div>';
   if(ds.length)h+='<div class="chips">'+ds.map(d=>'<button class="chip" data-date="'+d+'"'+(d===S.date?' aria-current="date"':'')+'>'+esc(dayLabel(d))+'</button>').join("")+'</div>';
@@ -1313,7 +1353,7 @@ function renderAdmin(){
 }
 function render(){
   if(S.bundle&&S.bundle.role==="driver"&&!S.dk.busy)setTimeout(dkSync,50);
-  readLast();readNt();readLv();readHf();if(S.bundle&&S.bundle.role==='admin'&&S.view==='msg')readMsg();if(S.bundle&&S.bundle.role==='admin'&&S.view==='plan')readPl();
+  readLast();readNt();readLv();readHf();readAc();if(S.bundle&&S.bundle.role==='admin'&&S.view==='msg')readMsg();if(S.bundle&&S.bundle.role==='admin'&&S.view==='plan')readPl();
   const M=$("#main");
   $("#switch").hidden=!S.sess;$("#switch").textContent="Logga ut";
   $("#status").textContent=S.cars?((S.offline?"Utan nät – visar senast hämtade. ":"")+"Senast publicerad "+new Date(S.cars.updated).toLocaleString("sv-SE",{dateStyle:"short",timeStyle:"short"})+"."):"";
@@ -1339,7 +1379,7 @@ function render(){
   if(!S.bundle){M.innerHTML='<div class="card muted">'+(S.err?esc(S.err):'Hämtar rutten…')+'</div>';return}
   if(isOv()){
     if(S.bundle.role==="ekonomi"){M.innerHTML='<div class="content">'+renderSum()+'</div>';return}
-    const cnt=(S.bundle.planCars||[]).reduce((a,c)=>a+notisUnread(c.dir,today()).length+notisUnread(c.dir,iso(new Date(Date.now()+864e5))).length,0);
+    const cnt=(S.bundle.planCars||[]).reduce((a,c)=>a+notisUnread(c.dir,today()).length+notisUnread(c.dir,iso(new Date(Date.now()+864e5))).length,0)+andringNek();
     const items=[["ov","Översikt",cnt],["plan","Planering",0],["msg","Meddelanden",0],["stat","Stationer",0],["paus","Pauser",0],["ham","Hämtningar",hmOpen()],["fel","Verkstad",felNy()],["ark","Arkiv",0],["led","Ledighet",S.led.filter(x=>x.status==="ny").length],["sum","Sammanställning",0]];
     const nav='<nav class="side"><div class="sidehd">Kontoret</div>'+items.map(([k,l,n])=>'<button data-view="'+k+'"'+(S.view===k?' aria-current="page"':'')+'><span>'+l+'</span>'+(n?'<i class="badge">'+n+'</i>':'')+'</button>').join("")+'</nav>';
     M.innerHTML='<div class="shell">'+nav+'<div class="content">'+(S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'</div></div>';return}
@@ -1347,7 +1387,6 @@ function render(){
   if(ds.length)h+='<div class="chips">'+ds.map(d=>'<button class="chip" data-date="'+d+'"'+(d===S.date?' aria-current="date"':'')+'>'+esc(dayLabel(d))+' <span>'+S.bundle.days[d].legs.length+' st</span></button>').join("")+'</div>';
   const r=route();
   if(!r){M.innerHTML=h+'<div class="card" style="font-size:17px">Ingen rutt är utskickad till '+esc(car.name)+' just nu.</div><div style="margin-top:12px">'+newFormHtml(null)+'</div><div style="margin-top:12px">'+pausCard()+myNotis()+'</div>'+swapBanner()+hamtCard()+felCard()+arkCard()+ledCard();return}
-  if(S.pl0){const k="seen:"+S.bundle.dir+":"+r.date,sn=store.get(k);if(!sn)store.set(k,String(r.updated));else if(sn!==String(r.updated))h+='<div class="notice warn" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>Rutten har ändrats sedan du senast tittade.</span><button class="btn small" data-al="chg" data-k="'+esc(k)+'" data-u="'+esc(String(r.updated))+'">Okej</button></div>'}
   h+=driverNotesHtml(r);h+='<div>'+pausCard()+myNotis()+'</div>'+swapBanner();
   const st=statesFor(S.bundle.dir,r.date),g=st.get("dag|godkand"),pc=pendingCount();
   h+='<div class="card" style="display:flex;flex-direction:column;gap:10px">'+(g?'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between"><span class="done'+(g.pending?' wait':'')+'">✓ Dagens ordrar godkända '+esc(hhmm(g.ts))+'</span><button class="btn link" data-undo="godkand" data-order="dag">Ångra</button></div>':'<button class="btn go big" data-act="godkand" data-order="dag">Godkänn dagens ordrar</button><p class="muted" style="margin:0;font-size:14.5px">Gå igenom transporterna nedan och godkänn innan du börjar köra.</p>')+
@@ -1479,7 +1518,7 @@ function topAlerts(){
   S.led.filter(x=>x.dir===dir&&(x.status==="godkand"||x.status==="avslagen")).forEach(x=>{out.push({key:"l:"+x.id+":"+x.status,t:"Ledighet "+ledSpan(x)+": "+(x.status==="godkand"?"godkänd":"avslagen"+(x.svar?" ("+x.svar+")":""))})});
   return out.map(a=>Object.assign(a,{seen:seen.has(a.key)}))}
 function alertsHtml(){
-  if(!(S.bundle&&S.bundle.role==="driver"))return "";const al=topAlerts().filter(a=>!a.seen);let h="";
+  if(!(S.bundle&&S.bundle.role==="driver"))return "";const al=topAlerts().filter(a=>!a.seen);let h=changeCards();
   if(al.length)h+='<div class="notice msg" style="border-left:5px solid var(--accent);margin-bottom:10px"><b>Nytt från kontoret</b>'+al.map(a=>'<div style="margin-top:6px;font-size:16px">'+esc(a.t)+'</div>').join("")+'<div style="margin-top:10px"><button class="btn go" data-al="ok">Okej, jag har läst</button></div></div>';
   if("Notification" in window&&Notification.permission==="default")h+='<div class="notice" style="margin-bottom:10px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>Få en avisering när rutten ändras eller kontoret svarar.</span><button class="btn small" data-al="perm">Slå på aviseringar</button></div>';
   return h}
