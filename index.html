@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Transport Planering</title>
-<meta name="theme-color" content="#00932a">
+<meta name="theme-color" content="#133a2e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -14,8 +14,8 @@
 <link rel="icon" href="icon-192.png">
 <style>
 :root{
-  --bg:#e9e5da;--surface:#fffefb;--sunk:#efece3;--line:#d6d1c3;--fg:#1f1e1d;--muted:#6b6a64;
-  --accent:#00932a;--accent-fg:#fff;--accent-soft:#e2f4e5;--blue:#1f5fa8;--blue-soft:#e1ebf7;--brand:#00aa13;--adr:#d7261e;
+  --bg:#c9ccd0;--surface:#fbfbfb;--sunk:#e4e6e8;--line:#b5babf;--fg:#1f1e1d;--muted:#6b6a64;
+  --accent:#1f5a44;--accent-fg:#fff;--accent-soft:#d8e6df;--blue:#1f5fa8;--blue-soft:#e1ebf7;--brand:#00aa13;--adr:#d7261e;
   --full:#1d7a4a;--full-bg:#e1f2e8;--empty:#6b5a2a;--empty-bg:#f6eed6;--warn:#9a5b00;--warn-bg:#fdf0d6;
   --f-display:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
   --f-body:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
@@ -118,14 +118,14 @@ html.wide #main{display:flex;flex-direction:column;gap:18px}
 @media (max-width:1250px){.cargrid{grid-template-columns:1fr}}
 .cargrid .ov-row{grid-template-columns:auto minmax(0,1fr)}.cargrid .ov-row .ov-st{grid-column:2;display:flex;gap:6px;flex-wrap:wrap}
 .cargrid .ov-car{margin:0}
-.side{background:#0e3b1d;border-color:#0e3b1d;padding:14px 10px;gap:4px;box-shadow:0 6px 18px rgba(14,59,29,.18)}
+.side{background:#133a2e;border-color:#133a2e;padding:14px 10px;gap:4px;box-shadow:0 6px 18px rgba(19,58,46,.25)}
 .side button{color:#d6ecdb;font-weight:500;padding:12px 14px}
 .side button:hover{background:rgba(255,255,255,.09)}
-.side button[aria-current=page]{background:#fff;color:#0e3b1d;font-weight:700}
+.side button[aria-current=page]{background:#fff;color:#133a2e;font-weight:700}
 .side .badge{background:#e5483d;color:#fff}
 .side .sidehd{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#8fc09b;padding:6px 14px 8px}
-.pagehead{padding-bottom:4px;border-bottom:1px solid var(--line);margin-bottom:2px}
-.card{box-shadow:0 1px 2px rgba(60,50,20,.06),0 6px 18px rgba(60,50,20,.05)}
+.pagehead{padding-bottom:4px;border-bottom:1px solid #aeb3b8;margin-bottom:2px}
+.card{box-shadow:0 1px 2px rgba(20,30,40,.08),0 4px 14px rgba(20,30,40,.06)}
 .tile{box-shadow:0 1px 2px rgba(60,50,20,.06)}
 .pagehead h2{font-size:34px}
 .pagehead{border-bottom-color:#cfc9ba}
@@ -157,6 +157,30 @@ html.wide .plcol .legs{display:flex;flex-direction:column;gap:10px;grid-template
 .bp u,.sts u{width:9px;height:9px;border-radius:50%;display:inline-block;text-decoration:none;background:#999}
 .red u{background:#d6453d}.yel u{background:#e5a526}.grn u{background:#2da44e}.gry u{background:#8d8b84}
 .sts{display:flex;gap:8px;align-items:center;font-size:14.5px}
+
+/* Bred, tätare kontorsvy */
+html.wide .wrap{max-width:none;padding-left:18px;padding-right:22px;gap:12px}
+html.wide body{font-size:14px}
+html.wide h1{font-size:26px}
+html.wide h2{font-size:22px}html.wide .pagehead h2{font-size:26px}html.wide h3{font-size:17px}
+html.wide .minilogo{height:56px}
+html.wide .shell{grid-template-columns:190px minmax(0,1fr);gap:20px}
+html.wide .side button{font-size:14px;padding:9px 12px}
+html.wide .btn{font-size:14px;min-height:36px;padding:6px 12px}
+html.wide .btn.big{min-height:44px;font-size:15px}
+html.wide .chip{font-size:14px;min-height:32px;padding:3px 12px}
+html.wide .card{padding:16px}
+html.wide .tile{padding:12px 16px}html.wide .tile .v{font-size:26px}html.wide .tile .k{font-size:11px}
+html.wide input,html.wide select,html.wide textarea{font-size:14px!important;padding:6px 9px!important}
+html.wide .fld,html.wide label.muted{font-size:12.5px!important}
+html.wide .leg{padding:12px}html.wide .n{font-size:19px}html.wide .note{font-size:14px}
+html.wide .ov-row{font-size:13.5px}
+html.wide .strow{font-size:13.5px;padding:10px 14px}
+html.wide .carcard .ch{font-size:16px}
+html.wide .notice{font-size:13.5px}
+html.wide .pill,html.wide .tag{font-size:12px}
+html.wide .nrow{font-size:14px}
+html.wide table{font-size:14px}
 @media (max-width:900px){.shell{grid-template-columns:1fr}.side{position:static;flex-direction:row;overflow-x:auto}.side button{white-space:nowrap}}
 html.out,html.out body{background:var(--surface)}
 .btn.big{min-height:58px;font-size:18px;width:100%}
