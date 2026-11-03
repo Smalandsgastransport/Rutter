@@ -263,7 +263,7 @@ async function afterLoad(){
   if(S.bundle.role==='admin'){await loadPlansAdmin();await loadNotes();await loadPauser();await loadSwaps();await loadLedig();await loadFel();await loadHamt();await loadStat();if(S.view==='ark')arLoad().then(()=>render());
     const ds=[...new Set([today(),iso(new Date(Date.now()+864e5)),S.pl.date||today(),S.date].filter(Boolean))];
     await Promise.all((S.bundle.planCars||[]).filter(c=>c.dir).map(async c=>{for(const d of (S.view==='paus'?[...new Set(ds.concat(pausDays()))]:ds)){await ghList(c.dir,d);await fetchNy(c.dir,d)}}))}
-  else if(S.bundle.role==='driver'){await loadPlansDriver();await loadNotes();await loadPauser();await loadSwaps();await loadLedig();await loadFel();await loadHamt();await loadPeerPlans();dkHist().then(()=>render());for(const d of [today(),iso(new Date(Date.now()-864e5))]){await ghList(S.bundle.dir,d);await fetchNy(S.bundle.dir,d)}}
+  else if(S.bundle.role==='driver'){await loadPlansDriver();await loadNotes();await loadPauser();await loadSwaps();await loadLedig();await loadFel();await loadHamt();await loadPeerPlans();if(!S.dk.hlast||Date.now()-S.dk.hlast>3e5){S.dk.hlast=Date.now();dkHist().then(()=>render())}for(const d of [today(),iso(new Date(Date.now()-864e5))]){await ghList(S.bundle.dir,d);await fetchNy(S.bundle.dir,d)}}
   if(isOv()){const all=S.bundle.role==="ekonomi"||S.view==="sum";await Promise.all(S.bundle.cars.map(async c=>{for(const d of (all?Object.keys(c.days):(S.date?[S.date]:[]))){await ghList(c.dir,d);await fetchNy(c.dir,d)}}));return}
   await sync();if(S.date){await ghList(S.bundle.dir,S.date);await fetchNy(S.bundle.dir,S.date)}
 }
@@ -675,7 +675,7 @@ function notisCard(date){
     return '<div class="nrow" style="align-items:center"><span class="pill p-warn">'+esc(KIND[r.n.d.kind]||"Meddelande")+'</span><b>'+esc(r.c.name)+(r.c.driver?' · '+esc(r.c.driver.split(" ")[0]):'')+'</b><span>'+esc(r.n.d.text||"")+(r.n.d.tid?' (kl '+esc(r.n.d.tid)+')':'')+'</span><span class="muted">'+esc(hhmm(new Date(r.n.ts).toISOString()))+'</span>'+
     (rd?'<span class="pill p-full">✓ Läst '+esc(hhmm(new Date(rd.ts).toISOString()))+'</span>'+(rd.svar?'<span class="muted">Svar: '+esc(rd.svar)+'</span>':''):'<span class="acts"><button class="btn go small" data-nl="ok" data-dir="'+esc(r.c.dir)+'" data-date="'+esc(date)+'" data-ref="'+esc(r.n.name)+'">Läst</button><button class="btn small" data-nl="svar" data-dir="'+esc(r.c.dir)+'" data-date="'+esc(date)+'" data-ref="'+esc(r.n.name)+'">Läst + svara</button></span>')+'</div>'}).join("")+'</div>'}
 function myNotis(){
-  if(!(S.bundle&&S.bundle.role==="driver"))return "";const d=today(),ns=notisAll(S.bundle.dir,d);if(!ns.length)return "";const rd=notisReads(S.bundle.dir,d);
+  if(!(S.bundle&&S.bundle.role==="driver"))return "";const ds=[...new Set([today(),S.date].filter(Boolean))],rd=new Map(),ns=[];ds.forEach(d=>{notisReads(S.bundle.dir,d).forEach((v,k)=>rd.set(k,v));ns.push(...notisAll(S.bundle.dir,d))});if(!ns.length)return "";
   return '<div class="card" style="margin-top:12px"><b>Dina meddelanden till kontoret</b>'+ns.map(n=>{const r=rd.get(n.name);return '<div class="nrow"><span>'+esc((KIND[n.d.kind]||"Meddelande")+(n.d.text?': '+n.d.text:'')+(n.d.tid?' (kl '+n.d.tid+')':''))+'</span>'+(r?'<span class="pill p-full">✓ Kontoret har läst '+esc(hhmm(new Date(r.ts).toISOString()))+'</span>'+(r.svar?'<div class="notice msg" style="margin-top:6px"><b>Svar från kontoret</b><br>'+esc(r.svar)+'</div>':''):'<span class="muted">'+(n.pending?'Väntar på att skickas':'Skickat – ej läst än')+'</span>')+'</div>'}).join("")+'</div>'}
 document.addEventListener("click",async e=>{const t=e.target.closest("[data-nl]");if(!t||!S.bundle)return;
   let svar="";if(t.dataset.nl==="svar"){svar=(window.prompt("Svar till föraren:","")||"").trim();if(!svar)return}
@@ -1323,7 +1323,7 @@ function render(){
     const items=[["ov","Översikt",cnt],["plan","Planering",0],["msg","Meddelanden",0],["stat","Stationer",0],["paus","Pauser",0],["ham","Hämtningar",hmOpen()],["fel","Verkstad",felNy()],["ark","Arkiv",0],["led","Ledighet",S.led.filter(x=>x.status==="ny").length],["sum","Sammanställning",0]];
     const nav='<nav class="side"><div class="sidehd">Kontoret</div>'+items.map(([k,l,n])=>'<button data-view="'+k+'"'+(S.view===k?' aria-current="page"':'')+'><span>'+l+'</span>'+(n?'<i class="badge">'+n+'</i>':'')+'</button>').join("")+'</nav>';
     M.innerHTML='<div class="shell">'+nav+'<div class="content">'+(S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'</div></div>';return}
-  const ds=days();let h='';
+  const ds=days();let h=alertsHtml();
   if(ds.length)h+='<div class="chips">'+ds.map(d=>'<button class="chip" data-date="'+d+'"'+(d===S.date?' aria-current="date"':'')+'>'+esc(dayLabel(d))+' <span>'+S.bundle.days[d].legs.length+' st</span></button>').join("")+'</div>';
   const r=route();
   if(!r){M.innerHTML=h+'<div class="card" style="font-size:17px">Ingen rutt är utskickad till '+esc(car.name)+' just nu.</div><div style="margin-top:12px">'+newFormHtml(null)+'</div><div style="margin-top:12px">'+pausCard()+myNotis()+'</div>'+swapBanner()+hamtCard()+felCard()+arkCard()+ledCard();return}
@@ -1447,6 +1447,49 @@ document.addEventListener("input",e=>{const t=e.target;if(t.dataset&&t.dataset.p
 document.addEventListener("change",e=>{const t=e.target;if(t.id==="pDate"&&t.value){S.pl.date=t.value;S.pl.form=null;render();return}if(t.id==="rFrom"||t.id==="rTo"){S[t.id==="rFrom"?"from":"to"]=t.value;render();return}if(t.dataset&&t.dataset.lfn!==undefined&&S.lastForm){readLast();const i=+t.dataset.lfn,p=document.querySelector('[data-lfinfo="'+i+'"]');if(p)p.innerHTML=infoTxt(S.lastForm,i);const q=document.querySelector('[data-lfprev="'+i+'"]');if(q)q.textContent=prevTxt(S.lastForm,i)}});
 document.addEventListener("submit",e=>{if(e.target.id==="loginForm"){e.preventDefault();const u=$("#user").value.trim(),pw=$("#pw").value.trim();if(!u||!pw){S.err="Fyll i användarnamn och lösenord.";render();return}login(u,pw)}});
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&S.sess)refresh()});
+/* ---------- Nytt från kontoret: banner överst + automatisk uppdatering + aviseringar ---------- */
+const seenKey=()=>"alseen:"+(S.bundle&&S.bundle.dir);
+const alSeen=()=>{try{return new Set(JSON.parse(store.get(seenKey())||"[]"))}catch(e){return new Set()}};
+function topAlerts(){
+  if(!(S.bundle&&S.bundle.role==="driver"))return [];const dir=S.bundle.dir,out=[],seen=alSeen();
+  const ds=[...new Set([today(),iso(new Date(Date.now()-864e5)),iso(new Date(Date.now()+864e5)),S.date].filter(Boolean))];
+  ds.forEach(d=>{const rd=notisReads(dir,d);notisAll(dir,d).forEach(n=>{const r=rd.get(n.name);if(!r)return;out.push({key:"n:"+n.name+":"+(r.svar?"s":"r"),t:"Kontoret har läst ditt meddelande"+(n.d.text?' "'+n.d.text+'"':"")+" ("+hhmm(new Date(r.ts).toISOString())+")"+(r.svar?". Svar: "+r.svar:"")})})});
+  S.hm.filter(x=>x.dir===dir&&x.status!=="ny").forEach(x=>{out.push({key:"h:"+x.id+":"+x.status+":"+(x.mf?x.mf.date+x.mf.tid:"")+x.date+x.tid,t:"Hämtning "+x.plats+" "+hmWhen(x)+": "+(x.status==="godkand"?"godkänd":x.status==="nekad"?"nekad"+(x.svar?" ("+x.svar+")":""):"kontoret föreslår "+hmWhen(x.mf)+(x.mf.text?" – "+x.mf.text:""))})});
+  S.fel.filter(x=>x.dir===dir&&(x.logg||[]).length).forEach(x=>{const l=x.logg[x.logg.length-1];out.push({key:"f:"+x.id+":"+x.logg.length,t:'Felanmälan "'+(x.rub||"")+'": '+(FS[l.status]?FS[l.status][0]:"")+(l.text?" – "+l.text:"")})});
+  S.led.filter(x=>x.dir===dir&&(x.status==="godkand"||x.status==="avslagen")).forEach(x=>{out.push({key:"l:"+x.id+":"+x.status,t:"Ledighet "+ledSpan(x)+": "+(x.status==="godkand"?"godkänd":"avslagen"+(x.svar?" ("+x.svar+")":""))})});
+  return out.map(a=>Object.assign(a,{seen:seen.has(a.key)}))}
+function alertsHtml(){
+  if(!(S.bundle&&S.bundle.role==="driver"))return "";const al=topAlerts().filter(a=>!a.seen);let h="";
+  if(al.length)h+='<div class="notice msg" style="border-left:5px solid var(--accent);margin-bottom:10px"><b>Nytt från kontoret</b>'+al.map(a=>'<div style="margin-top:6px;font-size:16px">'+esc(a.t)+'</div>').join("")+'<div style="margin-top:10px"><button class="btn go" data-al="ok">Okej, jag har läst</button></div></div>';
+  if("Notification" in window&&Notification.permission==="default")h+='<div class="notice" style="margin-bottom:10px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>Få en avisering när rutten ändras eller kontoret svarar.</span><button class="btn small" data-al="perm">Slå på aviseringar</button></div>';
+  return h}
+document.addEventListener("click",async e=>{const t=e.target.closest("[data-al]");if(!t)return;
+  if(t.dataset.al==="ok"){const s=alSeen();topAlerts().forEach(a=>s.add(a.key));store.set(seenKey(),JSON.stringify([...s].slice(-300)));render();return}
+  if(t.dataset.al==="perm"){try{await Notification.requestPermission()}catch(x){}render()}});
+function notifyDriver(title,body,tag){
+  try{toast(title+(body?": "+body:""))}catch(e){}
+  try{if(navigator.vibrate)navigator.vibrate([200,100,200])}catch(e){}
+  try{if("Notification" in window&&Notification.permission==="granted"){
+    if(navigator.serviceWorker&&navigator.serviceWorker.ready)navigator.serviceWorker.ready.then(r=>r.showNotification(title,{body,tag:tag||"rutt",icon:"icon-192.png",badge:"icon-192.png",vibrate:[200,100,200],renotify:true})).catch(()=>{try{new Notification(title,{body})}catch(x){}});
+    else new Notification(title,{body})}}catch(e){}}
+S.nf2={route:null,al:null,sig:""};
+async function driverPoll(){
+  if(document.visibilityState!=="visible"||!S.bundle||S.bundle.role!=="driver"||S.pollBusy||S.busy)return;S.pollBusy=true;
+  try{await afterLoad();
+    const dir=S.bundle.dir,ru={};Object.keys(S.plans).forEach(k=>{if(k.indexOf(dir+"|")===0)ru[k]=S.plans[k].updated});
+    const al=new Set(topAlerts().map(a=>a.key));
+    if(S.nf2.route){
+      const ch=Object.keys(ru).filter(k=>S.nf2.route[k]!==ru[k]);
+      if(ch.length)notifyDriver("Rutten är uppdaterad","Kontoret har ändrat dagens rutt.","rutt-"+ch[0]);
+      else{const nw=topAlerts().filter(a=>!S.nf2.al.has(a.key)&&!a.seen);if(nw.length)notifyDriver("Nytt från kontoret",nw[0].t,"al-"+nw[0].key)}}
+    S.nf2.route=ru;S.nf2.al=al;
+    const sig=JSON.stringify([ru,[...al],Object.keys(S.server).map(k=>k+":"+(S.server[k]||[]).length),S.hm.length,S.fel.length]);
+    if(sig!==S.nf2.sig){S.nf2.sig=sig;render()}}
+  catch(e){}
+  finally{S.pollBusy=false}}
+setInterval(driverPoll,40*1000);
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")setTimeout(driverPoll,300)});
+
 setInterval(()=>{if(document.visibilityState==="visible"&&S.sess)refresh()},5*60*1000);
 setInterval(async()=>{if(document.visibilityState!=="visible"||!S.bundle)return;if(isOv()){await afterLoad();render()}else if(pendingCount()){await sync();render()}},60*1000);
 window.addEventListener("online",async()=>{if(S.bundle&&S.bundle.role==="driver"){await sync();render()}});
