@@ -1,0 +1,26 @@
+{
+ "updated": "2026-11-03T13:04:35.756Z",
+ "cars": [
+  {
+   "id": "bil1",
+   "name": "Bil 1",
+   "dir": "8b27de6ec4d47cb4",
+   "salt": "da559a5b7138ca3928d2360c9fc462ef",
+   "iter": 250000
+  },
+  {
+   "id": "bil2",
+   "name": "Bil 2",
+   "dir": "8cd569c0bc2d7311",
+   "salt": "2759ff5a6382a7c83148fa4ebcb04efb",
+   "iter": 250000
+  },
+  {
+   "id": "bil3",
+   "name": "Bil 3",
+   "dir": "ef536f7798c96f4c",
+   "salt": "5304f77555f8888a67fbf6e8fd045cf7",
+   "iter": 250000
+  }
+ ]
+}

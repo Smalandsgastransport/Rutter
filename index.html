@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Min rutt</title>
+<meta name="theme-color" content="#1f5fa8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Min rutt">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#f2f4f6;--surface:#fff;--sunk:#e7ebef;--line:#d2d9e0;--fg:#17202a;--muted:#566473;
+  --accent:#1f5fa8;--accent-fg:#fff;--accent-soft:#e1ebf7;--adr:#d7261e;
+  --full:#1d7a4a;--full-bg:#e1f2e8;--empty:#6b5a2a;--empty-bg:#f6eed6;--warn:#9a5b00;--warn-bg:#fdf0d6;
+  --f-display:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#10151b;--surface:#19212a;--sunk:#222b35;--line:#33404d;--fg:#e6ebf0;--muted:#9aa7b4;
+  --accent:#6aa5ec;--accent-fg:#0b1520;--accent-soft:#1a2c42;--adr:#e2463e;
+  --full:#6cc48f;--full-bg:#16301f;--empty:#e0c47a;--empty-bg:#33290f;--warn:#e6a64a;--warn-bg:#3a2c12;color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
+body{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.wrap{max-width:820px;margin:0 auto;padding-block:16px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:14px}
+h1,h2,h3{font-family:var(--f-display);margin:0;font-weight:700}
+h1{font-size:28px;line-height:1.1}
+button,a.btn{font:inherit;color:inherit}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{display:flex;gap:12px;align-items:center}
+.diamond{width:42px;height:42px;position:relative;flex:none}
+.diamond::before{content:"";position:absolute;inset:6px;background:var(--adr);transform:rotate(45deg);border-radius:3px}
+.diamond span{position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-weight:700;font-size:14px}
+.brand p{margin:0;color:var(--muted);font-size:14px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 16px;min-height:48px;font-weight:600;font-size:16px;text-decoration:none;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn.small{min-height:38px;padding:6px 12px;font-size:14.5px}
+.btn:disabled{opacity:.5}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
+.muted{color:var(--muted)}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 14px;font-weight:600;min-height:40px;cursor:pointer}
+.chip[aria-current="date"]{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.chip span{font-weight:400;opacity:.8}
+.stats{display:flex;gap:10px 26px;flex-wrap:wrap}
+.stat{display:flex;flex-direction:column}
+.stat .k{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.stat .v{font-family:var(--f-display);font-size:24px;font-weight:700}
+.reg{font-weight:700;letter-spacing:.06em;border:1.5px solid var(--fg);border-radius:4px;padding:0 6px;font-size:14px}
+.legs{display:flex;flex-direction:column;gap:12px}
+.leg{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.legtop{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.n{font-family:var(--f-display);font-size:24px;font-weight:700}
+.pills{display:flex;gap:6px;flex-wrap:wrap}
+.pill{display:inline-block;font-size:13px;font-weight:700;padding:2px 10px;border-radius:999px;white-space:nowrap}
+.p-full{background:var(--full-bg);color:var(--full)}
+.p-tom{background:var(--empty-bg);color:var(--empty)}
+.p-del{background:var(--accent-soft);color:var(--accent)}
+.p-type{background:var(--sunk);color:var(--fg)}
+.p-antal{background:var(--accent-soft);color:var(--accent);border:1.5px solid var(--accent);font-size:14.5px;font-weight:800}
+.route{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:10px;align-items:start}
+.route .arrow{font-size:22px;color:var(--muted);padding-top:14px}
+.route .k{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.route b{display:block;font-size:17px}
+.route span{display:block;font-size:15px;color:var(--muted)}
+@media (max-width:520px){.route{grid-template-columns:minmax(0,1fr)}.route .arrow{display:none}}
+.note{font-size:14.5px;color:var(--muted)}
+.acts{display:flex;gap:8px;flex-wrap:wrap}
+.notice{padding:10px 14px;border-radius:10px;background:var(--accent-soft);font-size:15px}
+.notice.warn{background:var(--warn-bg)}
+.status{font-size:13.5px;color:var(--muted)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:12px 18px;border-radius:10px;font-size:15px;z-index:30;max-width:calc(100% - 32px)}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="top">
+    <div class="brand"><div class="diamond" aria-hidden="true"><span>2.1</span></div><div><h1>Min rutt</h1><p id="sub">Laddar…</p></div></div>
+    <div class="acts"><button class="btn small" id="refresh">Uppdatera</button><button class="btn small" id="switch" hidden>Byt bil</button></div>
+  </div>
+  <div id="main"></div>
+  <p class="status" id="status"></p>
+</div>
+<div id="toastHost"></div>
+<script>
+(function(){
+"use strict";
+const $=s=>document.querySelector(s);
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const DAYS=["söndag","måndag","tisdag","onsdag","torsdag","fredag","lördag"],MON=["jan","feb","mar","apr","maj","jun","jul","aug","sep","okt","nov","dec"];
+const LOADS={full:"Fullt",tom:"Tomt",del:"Delvis"};
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}}};
+const S={cars:null,sess:null,key:null,bundle:null,date:null,offline:false,busy:false,pick:null,err:""};
+try{S.sess=JSON.parse(store.get("sess")||"null")}catch(e){}
+function iso(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+const today=()=>iso(new Date());
+function dayLabel(s){const d=new Date(s+"T12:00:00");return DAYS[d.getDay()].replace(/^./,c=>c.toUpperCase())+" "+d.getDate()+" "+MON[d.getMonth()]}
+function hhmm(s){if(!s)return "";const d=new Date(s);return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")}
+function toast(m){const h=$("#toastHost");h.innerHTML='<div class="toast" role="status">'+esc(m)+'</div>';clearTimeout(toast.t);toast.t=setTimeout(()=>h.innerHTML="",3500)}
+const hex=h=>new Uint8Array(h.match(/../g).map(x=>parseInt(x,16)));
+const b64=u=>{let s="";const a=new Uint8Array(u);for(let i=0;i<a.length;i+=8192)s+=String.fromCharCode.apply(null,a.subarray(i,i+8192));return btoa(s)};
+const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+
+async function deriveKey(pw,car){const base=await crypto.subtle.importKey("raw",new TextEncoder().encode(pw),"PBKDF2",false,["deriveKey"]);return crypto.subtle.deriveKey({name:"PBKDF2",salt:hex(car.salt),iterations:car.iter,hash:"SHA-256"},base,{name:"AES-GCM",length:256},false,["decrypt"])}
+async function open(key,buf){const u=new Uint8Array(buf);return crypto.subtle.decrypt({name:"AES-GCM",iv:u.slice(0,12)},key,u.slice(12))}
+async function fetchBin(url){
+  let r=null;try{r=await fetch(url+"?t="+Date.now(),{cache:"no-store"})}catch(e){}
+  if((!r||!r.ok)&&"caches" in window)r=await caches.match(new URL(url,location.href).pathname);
+  if(!r||!r.ok)throw new Error("nät");return r.arrayBuffer();
+}
+async function loadCars(){
+  try{const r=await fetch("data/bilar.json?t="+Date.now(),{cache:"no-store"});if(!r.ok)throw 0;S.cars=await r.json();S.offline=false;store.set("bilar",JSON.stringify(S.cars))}
+  catch(e){S.offline=true;try{S.cars=JSON.parse(store.get("bilar")||"null")}catch(x){}}
+}
+function carOf(id){return S.cars&&S.cars.cars.find(c=>c.id===id)}
+async function loadBundle(){
+  const car=carOf(S.sess.car);if(!car)throw new Error("bil");
+  if(!S.key)S.key=await deriveKey(S.sess.pw,car);
+  let buf=null;
+  try{buf=await fetchBin("data/"+car.dir+"/rutt.bin");store.set("rutt:"+car.id,b64(buf))}
+  catch(e){const c=store.get("rutt:"+car.id);if(!c)throw e;buf=unb64(c).buffer;S.offline=true}
+  const json=JSON.parse(new TextDecoder().decode(await open(S.key,buf)));
+  const prev=S.bundle;S.bundle=json;pickDate();
+  const r=route();if(r){const k="seen:"+car.id+":"+r.date;const seen=store.get(k);S.changed=!!(seen&&seen!==r.updated);store.set(k,r.updated);prefetch(car,r)}
+}
+async function refresh(){
+  S.busy=true;render();await loadCars();
+  if(S.sess){try{await loadBundle();S.err=""}catch(e){if(e&&e.name==="OperationError"){logout("Lösenordet stämmer inte längre. Logga in igen.")}else S.err="Kunde inte hämta rutten."}}
+  S.busy=false;render();
+}
+function days(){if(!S.bundle)return [];const min=iso(new Date(Date.now()-864e5));return Object.keys(S.bundle.days).filter(d=>d>=min).sort()}
+function pickDate(){const ds=days();if(S.date&&ds.includes(S.date))return;S.date=ds.find(d=>d>=today())||ds[ds.length-1]||null}
+function route(){return S.bundle&&S.date?S.bundle.days[S.date]:null}
+function prefetch(car,r){if(!("caches" in window))return;caches.open("pdf-v2").then(c=>[r.allPdf].concat(r.legs.map(l=>l.pdf)).forEach(f=>{const u="data/"+car.dir+"/"+f;c.match(new URL(u,location.href).pathname).then(m=>{if(!m)fetch(u).then(res=>{if(res.ok)c.put(new URL(u,location.href).pathname,res)}).catch(()=>{})})})).catch(()=>{})}
+async function savePdf(file,name){
+  try{
+    const car=carOf(S.sess.car);const buf=await fetchBin("data/"+car.dir+"/"+file);
+    const blob=new Blob([await open(S.key,buf)],{type:"application/pdf"});
+    const f=new File([blob],name,{type:"application/pdf"});
+    if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:name});return}catch(e){if(e&&e.name==="AbortError")return}}
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);
+  }catch(e){toast("Kunde inte spara PDF:en. Kontrollera nätet och försök igen.")}
+}
+function logout(msg){S.sess=null;S.key=null;S.bundle=null;S.date=null;store.set("sess",null);S.err=msg||"";render()}
+async function login(carId,pw){
+  const car=carOf(carId);if(!car)return;
+  S.busy=true;S.err="";render();
+  try{const key=await deriveKey(pw,car);const buf=await fetchBin("data/"+car.dir+"/rutt.bin");await open(key,buf);
+    S.sess={car:carId,pw};S.key=key;store.set("sess",JSON.stringify(S.sess));await loadBundle();S.busy=false;render()}
+  catch(e){S.busy=false;S.err=(e&&e.name==="OperationError")?"Fel lösenord för "+car.name+".":"Kunde inte nå appen. Kontrollera nätet.";render()}
+}
+
+function render(){
+  const M=$("#main");
+  $("#switch").hidden=!S.sess;$("#switch").textContent="Logga ut";
+  $("#status").textContent=S.cars?((S.offline?"Utan nät – visar senast hämtade. ":"")+"Senast publicerad "+new Date(S.cars.updated).toLocaleString("sv-SE",{dateStyle:"short",timeStyle:"short"})+"."):"";
+  if(!S.cars){$("#sub").textContent="";M.innerHTML=S.busy?'<div class="card muted">Hämtar…</div>':'<div class="card">Kunde inte nå appen. Kontrollera nätet och tryck Uppdatera.</div>';return}
+  if(!S.sess){
+    $("#sub").textContent="Logga in";
+    const pick=S.pick&&carOf(S.pick);
+    M.innerHTML='<div class="card" style="display:flex;flex-direction:column;gap:14px"><h2>Logga in</h2>'+
+      '<div><div class="muted" style="font-size:14px;margin-bottom:6px">Välj bil</div><div class="acts">'+S.cars.cars.map(c=>'<button class="btn'+(S.pick===c.id?' primary':'')+'" data-pick="'+esc(c.id)+'">'+esc(c.name)+'</button>').join("")+'</div></div>'+
+      (pick?'<form id="loginForm" style="display:flex;flex-direction:column;gap:10px"><label style="display:flex;flex-direction:column;gap:6px"><span class="muted" style="font-size:14px">Lösenord för '+esc(pick.name)+'</span><input id="pw" type="password" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" style="font:inherit;font-size:18px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--fg)"></label><button class="btn primary" type="submit"'+(S.busy?' disabled':'')+'>'+(S.busy?'Loggar in…':'Logga in')+'</button></form>':'')+
+      (S.err?'<div class="notice warn">'+esc(S.err)+'</div>':'')+
+      '<p class="muted" style="margin:0;font-size:14px">Du är inloggad tills du loggar ut. Lösenordet får du av transportledaren.</p></div>';
+    const pw=$("#pw");if(pw)pw.focus();
+    return}
+  const car=carOf(S.sess.car);
+  $("#sub").textContent=car?car.name:"";
+  if(!S.bundle){M.innerHTML='<div class="card muted">'+(S.err?esc(S.err):'Hämtar rutten…')+'</div>';return}
+  const ds=days();let h='';
+  if(ds.length)h+='<div class="chips">'+ds.map(d=>'<button class="chip" data-date="'+d+'"'+(d===S.date?' aria-current="date"':'')+'>'+esc(dayLabel(d))+' <span>'+S.bundle.days[d].legs.length+' st</span></button>').join("")+'</div>';
+  const r=route();
+  if(!r){M.innerHTML=h+'<div class="card" style="font-size:17px">Ingen rutt är utskickad till '+esc(car.name)+' just nu.</div>';return}
+  if(S.changed)h+='<div class="notice warn">Rutten har ändrats sedan du senast tittade.</div>';
+  h+='<div class="card" style="display:flex;flex-direction:column;gap:14px"><h2>'+esc(dayLabel(r.date))+'</h2><div class="stats"><div class="stat"><span class="k">Transporter</span><span class="v">'+r.legs.length+'</span></div>'+(r.driver?'<div class="stat"><span class="k">Förare</span><span class="v">'+esc(r.driver.split(" ")[0])+'</span></div>':'')+(r.reg?'<div class="stat"><span class="k">Bil</span><span class="v">'+esc(r.reg)+'</span></div>':'')+(r.trailer?'<div class="stat"><span class="k">Släp</span><span class="v">'+esc(r.trailer)+'</span></div>':'')+'<div class="stat"><span class="k">Uppdaterad</span><span class="v">'+esc(hhmm(r.updated))+'</span></div></div>'+
+    '<div class="acts"><button class="btn primary" data-save="'+esc(r.allPdf)+'" data-name="'+esc(r.allPdfName)+'">Spara alla deklarationer (PDF)</button></div>'+
+    '<p class="muted" style="margin:0;font-size:14.5px">Tryck <b>Spara</b> och välj <b>Spara i Filer</b>.</p></div>';
+  h+='<div class="legs">'+r.legs.map(l=>'<div class="leg"><div class="legtop"><span class="n">'+String(l.seq).padStart(2,"0")+'</span><span class="pills">'+(l.antal>1?'<span class="pill p-antal">Antal '+l.antal+'</span>':'')+'<span class="pill p-type">'+esc(l.uppdrag||"")+'</span><span class="pill p-'+esc(l.load)+'">'+esc(LOADS[l.load]||l.load)+' · '+esc(l.mangd)+'</span></span></div>'+
+    '<div class="route"><div><span class="k">Hämta</span><b>'+esc(l.from.name)+'</b><span>'+esc(l.from.street)+', '+esc(l.from.zip)+' '+esc(l.from.city)+'</span></div><div class="arrow" aria-hidden="true">→</div><div><span class="k">Lämna</span><b>'+esc(l.to.name)+'</b><span>'+esc(l.to.street)+', '+esc(l.to.zip)+' '+esc(l.to.city)+'</span></div></div>'+
+    (l.note?'<div class="note">'+esc(l.note)+'</div>':'')+
+    '<div class="acts"><button class="btn small" data-save="'+esc(l.pdf)+'" data-name="'+esc(l.pdfName)+'">Spara deklaration</button></div></div>').join("")+'</div>';
+  M.innerHTML=h;
+}
+document.addEventListener("click",async e=>{
+  const t=e.target.closest("button");if(!t||t.getAttribute("type")==="submit")return;
+  if(t.dataset.pick){S.pick=t.dataset.pick;S.err="";render();return}
+  if(t.id==="switch"){logout("");return}
+  if(t.id==="refresh"){t.disabled=true;await refresh();t.disabled=false;toast(S.offline?"Ingen kontakt – visar senast hämtade.":"Uppdaterad.");return}
+  if(t.dataset.date){S.date=t.dataset.date;render();window.scrollTo(0,0);return}
+  if(t.dataset.save){t.disabled=true;await savePdf(t.dataset.save,t.dataset.name);t.disabled=false;return}
+});
+document.addEventListener("submit",e=>{if(e.target.id==="loginForm"){e.preventDefault();const pw=$("#pw").value.trim();if(pw&&S.pick)login(S.pick,pw)}});
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&S.sess)refresh()});
+setInterval(()=>{if(document.visibilityState==="visible"&&S.sess)refresh()},5*60*1000);
+if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+refresh();
+})();
+</script>
+</body>
+</html>
