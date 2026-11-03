@@ -38,14 +38,14 @@ button,a.btn{font:inherit;color:inherit}
 .diamond::before{content:"";position:absolute;inset:6px;background:var(--adr);transform:rotate(45deg);border-radius:3px}
 .diamond span{position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-weight:700;font-size:14px}
 .brand p{margin:0;color:var(--muted);font-size:14px}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 16px;min-height:48px;font-weight:600;font-size:16px;text-decoration:none;cursor:pointer}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:5px;padding:10px 16px;min-height:48px;font-weight:600;font-size:16px;text-decoration:none;cursor:pointer}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
 .btn.small{min-height:38px;padding:6px 12px;font-size:14.5px}
 .btn:disabled{opacity:.5}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:20px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .muted{color:var(--muted)}
 .chips{display:flex;gap:8px;flex-wrap:wrap}
-.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 14px;font-weight:600;min-height:40px;cursor:pointer}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:5px;padding:6px 14px;font-weight:600;min-height:40px;cursor:pointer}
 .chip[aria-current="date"]{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
 .chip span{font-weight:400;opacity:.8}
 .stats{display:flex;gap:10px 26px;flex-wrap:wrap}
@@ -54,11 +54,11 @@ button,a.btn{font:inherit;color:inherit}
 .stat .v{font-family:var(--f-display);font-size:24px;font-weight:700}
 .reg{font-weight:700;letter-spacing:.06em;border:1.5px solid var(--fg);border-radius:4px;padding:0 6px;font-size:14px}
 .legs{display:flex;flex-direction:column;gap:12px}
-.leg{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:0 1px 2px rgba(0,0,0,.04);display:flex;flex-direction:column;gap:10px}
+.leg{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:18px 20px;box-shadow:0 1px 2px rgba(0,0,0,.04);display:flex;flex-direction:column;gap:10px}
 .legtop{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .n{font-family:var(--f-display);font-size:24px;font-weight:700}
 .pills{display:flex;gap:6px;flex-wrap:wrap}
-.pill{display:inline-block;font-size:13px;font-weight:700;padding:2px 10px;border-radius:999px;white-space:nowrap}
+.pill{display:inline-block;font-size:13px;font-weight:700;padding:2px 10px;border-radius:5px;white-space:nowrap}
 .p-full{background:var(--full-bg);color:var(--full)}
 .p-tom{background:var(--empty-bg);color:var(--empty)}
 .p-del{background:var(--blue-soft);color:var(--blue)}
@@ -72,7 +72,7 @@ button,a.btn{font:inherit;color:inherit}
 @media (max-width:520px){.route{grid-template-columns:minmax(0,1fr)}.route .arrow{display:none}}
 .note{font-size:14.5px;color:var(--muted)}
 .acts{display:flex;gap:8px;flex-wrap:wrap}
-.notice{padding:10px 14px;border-radius:10px;background:var(--accent-soft);font-size:15px}
+.notice{padding:10px 14px;border-radius:5px;background:var(--accent-soft);font-size:15px}
 .notice.warn{background:var(--warn-bg)}
 .status{font-size:13.5px;color:var(--muted)}
 .login{min-height:calc(100vh - 80px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;padding-block:24px}
@@ -80,7 +80,7 @@ button,a.btn{font:inherit;color:inherit}
 .login form{width:min(380px,100%);display:flex;flex-direction:column;gap:12px}
 .login h2{text-align:center;font-size:24px}
 .login label{display:flex;flex-direction:column;gap:6px;font-size:14.5px;color:var(--muted)}
-.login input{font:inherit;font-size:18px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--fg)}
+.login input{font:inherit;font-size:18px;padding:12px 14px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg)}
 .login input:focus{outline:2px solid var(--accent);outline-offset:1px}
 .minilogo{height:64px;width:auto}
 .top{padding:10px 0 14px;border-bottom:1px solid var(--line);margin-bottom:4px}
@@ -96,15 +96,15 @@ html.wide table{font-size:16px}
 html.wide #main{display:flex;flex-direction:column;gap:18px}
 @media (min-width:1100px){html.wide .minilogo{height:76px}}
 .shell{display:grid;grid-template-columns:230px minmax(0,1fr);gap:28px;align-items:start}
-.side{position:sticky;top:16px;display:flex;flex-direction:column;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:10px}
-.side button{display:flex;justify-content:space-between;align-items:center;gap:8px;border:0;background:none;text-align:left;font:inherit;font-weight:600;font-size:16px;padding:12px 14px;border-radius:10px;cursor:pointer;color:var(--fg)}
+.side{position:sticky;top:16px;display:flex;flex-direction:column;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px}
+.side button{display:flex;justify-content:space-between;align-items:center;gap:8px;border:0;background:none;text-align:left;font:inherit;font-weight:600;font-size:16px;padding:12px 14px;border-radius:5px;cursor:pointer;color:var(--fg)}
 .side button:hover{background:var(--sunk)}
 .side button[aria-current=page]{background:var(--accent);color:var(--accent-fg)}
-.badge{font-style:normal;font-size:12px;font-weight:800;min-width:22px;text-align:center;padding:2px 7px;border-radius:99px;background:var(--adr);color:#fff}
+.badge{font-style:normal;font-size:12px;font-weight:800;min-width:22px;text-align:center;padding:2px 7px;border-radius:4px;background:var(--adr);color:#fff}
 .content{display:flex;flex-direction:column;gap:18px;min-width:0}
 .pagehead h2{font-size:30px}.pagehead p{margin:4px 0 0}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px}
-.tile{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 20px;display:flex;flex-direction:column;gap:4px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:18px 20px;display:flex;flex-direction:column;gap:4px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .tile .k{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
 .tile .v{font-family:var(--f-display);font-size:34px;font-weight:700;line-height:1.1}
 .tile .v small{font-size:15px;font-weight:500;color:var(--muted)}
@@ -124,24 +124,34 @@ html.wide #main{display:flex;flex-direction:column;gap:18px}
 .side .sidehd{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#8fc09b;padding:6px 14px 8px}
 .pagehead{padding-bottom:4px;border-bottom:1px solid var(--line);margin-bottom:2px}
 .card{box-shadow:0 1px 2px rgba(0,0,0,.04),0 4px 14px rgba(0,0,0,.03)}
-.bar{height:8px;border-radius:99px}
+.bar{height:8px;border-radius:4px}
+.carcards{align-items:start;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.carcard{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;cursor:pointer;border-left:4px solid var(--line)}
+.carcard[data-pcar]:hover{border-color:var(--accent);background:var(--accent-soft)}
+.carcard.on{cursor:default;border-color:var(--accent);border-left-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.carcard .ch{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:18px}
+.carcard .cs{display:flex;gap:8px;align-items:center;flex-wrap:wrap;color:var(--muted)}
+.carcard .cf{display:flex;flex-direction:column;gap:8px}
+.fld{font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
+.chip{border-radius:5px;font-weight:700}
+.side{border-radius:6px}.side button{border-radius:4px}
 @media (max-width:900px){.shell{grid-template-columns:1fr}.side{position:static;flex-direction:row;overflow-x:auto}.side button{white-space:nowrap}}
 html.out,html.out body{background:var(--surface)}
 .btn.big{min-height:58px;font-size:18px;width:100%}
 .btn.go{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
 .btn.link{border:0;background:none;min-height:38px;padding:4px 8px;color:var(--muted);text-decoration:underline;font-weight:500;font-size:14px}
-.done{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:15px;padding:6px 12px;border-radius:999px;background:var(--full-bg);color:var(--full)}
+.done{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:15px;padding:6px 12px;border-radius:5px;background:var(--full-bg);color:var(--full)}
 .done.wait{background:var(--warn-bg);color:var(--warn)}
 .leg.klar{border-color:var(--full)}
 .ov-car{display:flex;flex-direction:column;gap:10px}
 .ov-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px 12px;align-items:center;padding:8px 0;border-top:1px solid var(--line);font-size:15px}
 .ov-row .r{min-width:0;overflow-wrap:anywhere}
 .ov-st{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
-.tag{font-size:13px;font-weight:700;padding:2px 9px;border-radius:999px;white-space:nowrap;background:var(--sunk);color:var(--muted)}
+.tag{font-size:13px;font-weight:700;padding:2px 9px;border-radius:5px;white-space:nowrap;background:var(--sunk);color:var(--muted)}
 .tag.on{background:var(--full-bg);color:var(--full)}
-.bar{height:8px;border-radius:99px;background:var(--sunk);overflow:hidden}
+.bar{height:8px;border-radius:4px;background:var(--sunk);overflow:hidden}
 .bar i{display:block;height:100%;background:var(--accent)}
-.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:12px 18px;border-radius:10px;font-size:15px;z-index:30;max-width:calc(100% - 32px)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:12px 18px;border-radius:5px;font-size:15px;z-index:30;max-width:calc(100% - 32px)}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -372,7 +382,7 @@ function allChanged(){const r=route();return !!(r&&allLegs(S.bundle.dir,r.date,r
 S.lastForm=null;
 function flakForm(l){
   const F=S.lastForm,n=l.antal||1,fl=S.bundle.flak||{};
-  const inp='style="font:inherit;font-size:20px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--fg);width:100%"';
+  const inp='style="font:inherit;font-size:20px;padding:10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg);width:100%"';
   let h='<datalist id="flakList">'+Object.keys(fl).map(k=>'<option value="'+esc(k)+'">').join("")+'</datalist><div class="card" style="display:flex;flex-direction:column;gap:10px;margin-top:8px"><b>Vilket flak lastade du?</b>';
   for(let i=0;i<n;i++){
     const nr=(F.nr[i]||"").trim(),k=fl[nr];
@@ -406,7 +416,7 @@ async function saveLast(l){
 function placeOpts(sel){const ps=(S.bundle.places||[]);const g=(k,lab)=>'<optgroup label="'+lab+'">'+ps.filter(p=>p.kind===k).map(p=>'<option value="'+esc(p.id)+'"'+(p.id===sel?' selected':'')+'>'+esc(p.name)+'</option>').join("")+'</optgroup>';return '<option value="">Välj plats</option>'+g("fyll","Påfyllning")+g("station","Stationer")}
 function newFormHtml(r){
   const F=S.newForm;if(!F)return '<button class="btn" data-newopen="1" style="width:100%">+ Ny transport</button>';
-  const sel='style="font:inherit;font-size:17px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--fg);width:100%"';
+  const sel='style="font:inherit;font-size:17px;padding:10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg);width:100%"';
   return '<div class="card" style="display:flex;flex-direction:column;gap:12px"><h3 style="font-size:20px">Ny transport</h3>'+
     '<label class="muted" style="display:flex;flex-direction:column;gap:6px;font-size:14px">Hämta<select id="nfFrom" '+sel+'>'+placeOpts(F.from)+'</select></label>'+
     '<label class="muted" style="display:flex;flex-direction:column;gap:6px;font-size:14px">Lämna<select id="nfTo" '+sel+'>'+placeOpts(F.to)+'</select></label>'+
@@ -504,6 +514,8 @@ function plDraft(){
     const base=S.plans[k];if(base&&base.legs&&base.legs.length)base.sent=base.updated;
     S.pl.drafts[k]=d||(base?JSON.parse(JSON.stringify(base)):{date:S.pl.date,car:S.pl.car,carName:planCar().name,driver:planCar().driver||"",trailer:planCar().trailer||"",reg:planCar().reg||"",legs:[],next:1,sent:null,dirty:false})}
   return S.pl.drafts[k]}
+function plInfo(c){const k=c.dir+"|"+S.pl.date;let d=S.pl.drafts[k];if(!d){try{d=JSON.parse(store.get("pl:"+k)||"null")}catch(e){}}if(!d)d=S.plans[k];
+  return {driver:(d&&d.driver)||c.driver||"",reg:(d&&d.reg)||c.reg||"",trailer:(d&&d.trailer)||c.trailer||"",n:d&&d.legs?d.legs.length:0,sent:!!(d&&d.sent)}}
 function plSaveDraft(){const d=plDraft();d.dirty=true;store.set("pl:"+planKeyOf(),JSON.stringify(d))}
 function plPlace(id){return (S.bundle.places||[]).find(p=>p.id===id)}
 function plStrip(p){return {name:p.name,street:p.street,zip:p.zip,city:p.city}}
@@ -515,12 +527,14 @@ function renderPlan(){
   const B=S.bundle;if(!B.planKey)return '<div class="card muted">Planeringen är inte aktiverad.</div>';
   if(!S.pl.date)S.pl.date=iso(new Date(Date.now()+864e5));
   const car=planCar(),D=plDraft(),st=statesFor(car.dir,S.pl.date),F=S.pl.form;
-  const sel='style="font:inherit;font-size:17px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--fg);width:100%"';
-  const tabs=(B.planCars||[]).map(c=>'<button class="chip" data-pcar="'+c.id+'"'+(S.pl.car===c.id?' aria-current="date"':'')+'>'+esc(c.name)+'</button>').join("");
-  let h='<h2>Planering</h2><div class="card" style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><label class="muted" style="font-size:14px">Dag <input type="date" id="pDate" value="'+esc(S.pl.date)+'" '+sel.replace("width:100%","width:auto")+'></label><button class="chip" data-pdate="0">Idag</button><button class="chip" data-pdate="1">Imorgon</button></div><div class="chips">'+tabs+'</div></div>';
+  const sel='style="font:inherit;font-size:17px;padding:10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg);width:100%"';
+  const tabs=(B.planCars||[]).map(c=>{const sel1=S.pl.car===c.id,I=sel1?{driver:D.driver,reg:D.reg,trailer:D.trailer,n:D.legs.length,sent:!!D.sent}:plInfo(c);
+    return '<div class="carcard'+(sel1?' on':'')+'" '+(sel1?'':'data-pcar="'+c.id+'" role="button" tabindex="0"')+'><div class="ch"><b>'+esc(c.name)+'</b><span class="tag">'+(I.n?I.n+' transp.'+(I.sent?' · utskickad':' · ej utskickad'):'Ingen rutt')+'</span></div>'+
+    (sel1?'<div class="cf"><label class="fld">Förare<input data-pf="driver" value="'+esc(D.driver)+'" '+sel+'></label><label class="fld">Bil reg.nr<input data-pf="reg" value="'+esc(D.reg)+'" '+sel+'></label><label class="fld">Släp reg.nr<input data-pf="trailer" value="'+esc(D.trailer)+'" '+sel+'></label></div>':
+    '<div class="cs"><span>'+esc(I.driver||"Ingen förare")+'</span><span class="reg">'+esc(I.reg||"–")+'</span>'+(I.trailer?'<span class="reg">'+esc(I.trailer)+'</span>':'')+'</div>')+'</div>'}).join("");
+  let h='<h2>Planering</h2><div class="card" style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><label class="muted" style="font-size:14px">Dag <input type="date" id="pDate" value="'+esc(S.pl.date)+'" '+sel.replace("width:100%","width:auto")+'></label><button class="chip" data-pdate="0">Idag</button><button class="chip" data-pdate="1">Imorgon</button></div></div><div class="carcards">'+tabs+'</div>';
   h+=notisCard(S.pl.date);
-  h+='<div class="card" style="display:flex;flex-direction:column;gap:10px"><b>'+esc(car.name||"")+' · '+esc(dayLabel(S.pl.date))+'</b>'+
-    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px"><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Förare<input data-pf="driver" value="'+esc(D.driver)+'" '+sel+'></label><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Bilens reg.nr<input data-pf="reg" value="'+esc(D.reg)+'" '+sel+'></label><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Släp reg.nr<input data-pf="trailer" value="'+esc(D.trailer)+'" '+sel+'></label></div>';
+  h+='<div class="card" style="display:flex;flex-direction:column;gap:10px"><b>'+esc(car.name||"")+' · '+esc(dayLabel(S.pl.date))+'</b>';
   h+=D.legs.length?'<div class="legs">'+D.legs.map((l,i)=>{const L=st.get(l.order+"|lastad"),U=st.get(l.order+"|lossad");
     return '<div class="leg"><div class="legtop"><span class="n">'+String(i+1).padStart(2,"0")+'</span><span class="pills">'+(l.antal>1?'<span class="pill p-antal">Antal '+l.antal+'</span>':'')+'<span class="pill p-type">'+esc(l.uppdrag)+'</span><span class="pill p-'+esc(l.load)+'">'+esc(LOADS[l.load]||l.load)+' · '+esc(l.mangd)+'</span>'+(L?'<span class="pill p-full">Lastad '+esc(hhmm(L.ts))+'</span>':'')+(U?'<span class="pill p-full">Lossad '+esc(hhmm(U.ts))+'</span>':'')+'</span></div><div class="note"><b>'+esc(l.from.name)+'</b> → <b>'+esc(l.to.name)+'</b></div>'+(l.note?'<div class="note">'+esc(l.note)+'</div>':'')+
       '<div class="acts"><button class="btn small" data-plup="'+i+'"'+(i?'':' disabled')+'>↑</button><button class="btn small" data-pldown="'+i+'"'+(i<D.legs.length-1?'':' disabled')+'>↓</button><button class="btn small" data-pledit="'+i+'">Ändra</button><button class="btn link" data-pldel="'+i+'">Radera</button></div></div>'}).join("")+'</div>':'<p class="muted" style="margin:0">Inga transporter än för den här dagen.</p>';
@@ -566,7 +580,7 @@ function notisCard(date){
 function renderMsg(){
   const F=S.nf,cars=S.bundle.planCars||[];
   if(!F.from)F.from=iso(new Date());if(!F.to)F.to=F.from;
-  const inp='style="font:inherit;font-size:16px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--fg);width:100%"';
+  const inp='style="font:inherit;font-size:16px;padding:10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg);width:100%"';
   let h='<div class="pagehead"><h2>Meddelanden till bilarna</h2><p class="muted">Skriv en anteckning, till exempel ett planerat verkstadsbesök. Den visas överst i förarnas app de dagar du väljer.</p></div>';
   h+='<div class="card" style="display:flex;flex-direction:column;gap:12px"><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:6px">Meddelande<textarea id="mText" rows="3" '+inp+'>'+esc(F.text)+'</textarea></label>'+
     '<div style="display:flex;gap:12px;flex-wrap:wrap"><label class="muted" style="font-size:14px">Från <input type="date" id="mFrom" value="'+esc(F.from)+'" '+inp.replace("width:100%","width:auto")+'></label><label class="muted" style="font-size:14px">Till <input type="date" id="mTo" value="'+esc(F.to)+'" '+inp.replace("width:100%","width:auto")+'></label></div>'+
@@ -580,7 +594,7 @@ function driverNotesHtml(r){const cid=(S.bundle.car||{}).id,ns=notesFor(cid,r.da
   return ns.map(n=>'<div class="notice msg"><b>Meddelande från kontoret</b><br>'+esc(n.text)+'</div>').join("")}
 function notisForm(){
   const T=S.nt;if(!T)return '<button class="btn" data-ntopen="1">Meddela kontoret</button>';
-  const inp='style="font:inherit;font-size:17px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--fg);width:100%"';
+  const inp='style="font:inherit;font-size:17px;padding:10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg);width:100%"';
   return '<div class="card" style="display:flex;flex-direction:column;gap:10px"><b>Meddela kontoret</b><div class="chips">'+Object.keys(KIND).map(k=>'<button class="chip" data-ntkind="'+k+'"'+(T.kind===k?' aria-current="date"':'')+'>'+KIND[k]+'</button>').join("")+'</div>'+
     '<label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Klockslag (valfritt)<input id="ntTid" type="time" value="'+esc(T.tid||"")+'" '+inp+'></label><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Meddelande<input id="ntText" value="'+esc(T.text||"")+'" '+inp+'></label>'+(T.err?'<div class="notice warn">'+esc(T.err)+'</div>':'')+
     '<div class="acts"><button class="btn go" data-ntsend="1">Skicka</button><button class="btn" data-ntcancel="1">Avbryt</button></div></div>'}
@@ -595,7 +609,7 @@ const inR=d=>(!S.from||d>=S.from)&&(!S.to||d<=S.to);
 function sumTop(){
   const q=(l,a,b)=>'<button class="chip" data-range="'+a+'|'+b+'"'+(S.from===a&&S.to===b?' aria-current="date"':'')+'>'+l+'</button>';
   const tab=(k,l)=>'<button class="chip" data-sumtab="'+k+'"'+(S.sumTab===k?' aria-current="date"':'')+'>'+l+'</button>';
-  const inp='style="font:inherit;font-size:16px;padding:8px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--fg)"';
+  const inp='style="font:inherit;font-size:16px;padding:8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg)"';
   return '<div class="chips">'+CARS.map(c=>tab(c[0],c[1])).join("")+tab("tot","Totalt")+'</div>'+
    '<div class="card" style="display:flex;flex-direction:column;gap:10px"><b>Period</b><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><label class="muted" style="font-size:14px">Från <input type="date" id="rFrom" value="'+esc(S.from)+'" '+inp+'></label><label class="muted" style="font-size:14px">Till <input type="date" id="rTo" value="'+esc(S.to)+'" '+inp+'></label></div>'+
    '<div class="chips">'+q("Alla","","")+q("September","2026-09-01","2026-09-30")+q("Oktober","2026-10-01","2026-10-31")+q("November","2026-11-01","2026-11-30")+'</div></div>';
@@ -736,7 +750,7 @@ function render(){
   M.innerHTML=h;
 }
 document.addEventListener("click",async e=>{
-  const t=e.target.closest("button");if(!t||t.getAttribute("type")==="submit")return;
+  const t=e.target.closest("button,[data-pcar]");if(!t||t.getAttribute("type")==="submit")return;
   if(t.id==="switch"){logout("");return}
   if(t.id==="refresh"){t.disabled=true;await refresh();t.disabled=false;toast(S.offline?"Ingen kontakt – visar senast hämtade.":"Uppdaterad.");return}
   if(t.dataset.csv){const O=sumData(S.sumTab||"tot"),rows=rapportRows(S.sumTab||"tot",O);const q=v=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"';
