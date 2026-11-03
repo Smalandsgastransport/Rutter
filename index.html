@@ -257,9 +257,17 @@ async function loadBundle(){
   const prev=S.bundle;S.bundle=json;pickDate();
   const r=route();if(r&&!isOv()){prefetch(car,r)}
 }
-async function afterLoad(){
+async function repoHead(){const st=S.bundle&&S.bundle.status;if(!st)return true;
+  try{const h=ghHeaders(st);if(S.headEtag)h["If-None-Match"]=S.headEtag;
+    const r=await fetch(GH+st.repo+"/commits?per_page=1",{headers:h,cache:"no-store"});
+    if(r.status===304)return false;if(r.status===403||r.status===429)return false;if(!r.ok)return true;
+    const e=r.headers.get("ETag");if(e)S.headEtag=e;const j=await r.json(),sha=Array.isArray(j)&&j[0]?j[0].sha:null;
+    if(sha&&sha===S.headSha)return false;S.headSha=sha;return true}catch(e){return false}}
+async function afterLoad(force){
   if(!S.bundle)return;
   if(window.ARKIV)return akLoad();
+  if(force!==true&&S.lastDay===today()&&!(await repoHead())){if(S.bundle.role==="driver"&&pendingCount())await sync();return}
+  S.lastDay=today();
   ensurePush();
   if(S.bundle.role==='admin'){await loadPlansAdmin();await loadNotes();await loadPauser();await loadSwaps();await loadLedig();await loadFel();await loadHamt();await loadStat();if(S.view==='ark')arLoad().then(()=>render());
     const ds=[...new Set([today(),iso(new Date(Date.now()+864e5)),S.pl.date||today(),S.date].filter(Boolean))];
@@ -268,9 +276,9 @@ async function afterLoad(){
   if(isOv()){const all=S.bundle.role==="ekonomi"||S.view==="sum";await Promise.all(S.bundle.cars.map(async c=>{for(const d of (all?Object.keys(c.days):(S.date?[S.date]:[]))){await ghList(c.dir,d);await fetchNy(c.dir,d)}}));return}
   await sync();if(S.date){await ghList(S.bundle.dir,S.date);await fetchNy(S.bundle.dir,S.date)}
 }
-async function refresh(){
+async function refresh(f){
   S.busy=true;render();await loadCars();
-  if(S.sess){try{await loadBundle();S.err="";await afterLoad()}catch(e){if(e&&e.name==="OperationError"){logout("Lösenordet stämmer inte längre. Logga in igen.")}else S.err="Kunde inte hämta rutten."}}
+  if(S.sess){try{await loadBundle();S.err="";await afterLoad(f===true)}catch(e){if(e&&e.name==="OperationError"){logout("Lösenordet stämmer inte längre. Logga in igen.")}else S.err="Kunde inte hämta rutten."}}
   S.busy=false;render();
 }
 function days(){if(!S.bundle)return [];const min=iso(new Date(Date.now()-864e5));const all=isOv()?[...new Set([].concat(...S.bundle.cars.map(c=>Object.keys(c.days))))]:Object.keys(S.bundle.days);return all.filter(d=>d>=min).sort()}
@@ -517,7 +525,7 @@ async function createLeg(){
   S.newForm=null;render();toast("Transporten är skapad. Spara deklarationen på transporten.");await sync();render();
 }
 
-function logout(msg){S.sess=null;S.key=null;S.bundle=null;S.date=null;store.set("sess",null);S.err=msg||"";render()}
+function logout(msg){S.sess=null;S.lastDay=null;S.headSha=null;S.headEtag=null;S.key=null;S.bundle=null;S.date=null;store.set("sess",null);S.err=msg||"";render()}
 async function login(user,pw){
   S.busy=true;S.err="";render();
   const u=await userHash(user),car=carOf(u);
@@ -1410,7 +1418,7 @@ document.addEventListener("focusin",e=>{if(!S.bundle||S.bundle.role!=="admin")re
 document.addEventListener("click",async e=>{
   const t=e.target.closest("button,[data-pcar],[data-stedit]");if(!t||t.getAttribute("type")==="submit")return;
   if(t.id==="switch"){logout("");return}
-  if(t.id==="refresh"){t.disabled=true;await refresh();t.disabled=false;toast(S.offline?"Ingen kontakt – visar senast hämtade.":"Uppdaterad.");return}
+  if(t.id==="refresh"){t.disabled=true;await refresh(true);t.disabled=false;toast(S.offline?"Ingen kontakt – visar senast hämtade.":"Uppdaterad.");return}
   if(t.dataset.csv){const O=sumData(S.sumTab||"tot"),rows=rapportRows(S.sumTab||"tot",O);const q=v=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"';
     const csv="﻿"+[["Station","Fordon","Bränsle","Hämtas från","Antal flak","m3 (14 per flak)","Avstånd km","Retur km"]].concat(rows.map(r=>[r.st,r.fordon,r.bransle,r.fran,r.antal,r.m3,r.avst,r.retur])).map(r=>r.map(q).join(";")).join("\n");
     const blob=new Blob([csv],{type:"text/csv"}),f=new File([blob],"rapport-ekonomi.csv",{type:"text/csv"});
@@ -1483,8 +1491,8 @@ document.addEventListener("click",async e=>{
   if(t.dataset.pedel){const id=t.dataset.pedel;if(!confirm("Ta bort pausen?"))return;
     await pausMutate(()=>{let o=S.paus.find(v=>v.id===id);if(o&&o.manual)S.paus=S.paus.filter(v=>v.id!==id);else{if(!o){o={id};S.paus.push(o)}o.deleted=true}},"Borttagen.");return}
   if(t.dataset.ntsend){readNt();const T=S.nt;if(!(T.text||"").trim()&&!T.tid){T.err="Skriv ett meddelande eller ange klockslag.";render();return}t.disabled=true;S.nt=null;await record("notis","dag",{kind:T.kind,tid:T.tid||"",text:(T.text||"").trim()});toast("Kontoret har fått ditt meddelande.");return}
-  if(t.dataset.view){S.view=t.dataset.view;render();await afterLoad();render();return}
-  if(t.dataset.date){S.date=t.dataset.date;render();window.scrollTo(0,0);await afterLoad();render();return}
+  if(t.dataset.view){S.view=t.dataset.view;render();await afterLoad(true);render();return}
+  if(t.dataset.date){S.date=t.dataset.date;render();window.scrollTo(0,0);await afterLoad(true);render();return}
   if(t.dataset.lastopen){const r0=route(),l0=r0&&r0.legs.find(x=>x.order===t.dataset.lastopen);S.lastForm={order:t.dataset.lastopen,nr:((l0&&l0.flakPlan)||[]).slice(),vol:[],bar:[],ask:false,err:""};render();return}
   if(t.dataset.lfcancel){S.lastForm=null;render();return}
   if(t.dataset.lfok){const r=route(),l=allLegs(S.bundle.dir,r.date,r.legs).find(x=>x.order===S.lastForm.order);if(l){t.disabled=true;await saveLast(l)}return}
@@ -1547,11 +1555,11 @@ async function driverPoll(){
     if(sig!==S.nf2.sig){S.nf2.sig=sig;render()}}
   catch(e){}
   finally{S.pollBusy=false}}
-setInterval(driverPoll,40*1000);
+setInterval(driverPoll,20*1000);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")setTimeout(driverPoll,300)});
 
 setInterval(()=>{if(document.visibilityState==="visible"&&S.sess)refresh()},5*60*1000);
-setInterval(async()=>{if(document.visibilityState!=="visible"||!S.bundle)return;if(isOv()){await afterLoad();render()}else if(pendingCount()){await sync();render()}},60*1000);
+setInterval(async()=>{if(document.visibilityState!=="visible"||!S.bundle)return;if(isOv()){await afterLoad();render()}else if(pendingCount()){await sync();render()}},20*1000);
 window.addEventListener("online",async()=>{if(S.bundle&&S.bundle.role==="driver"){await sync();render()}});
 /* ---------- Arkivappen: sparar körda godsdeklarationer som PDF i en mapp på datorn ---------- */
 S.ak={dir:null,perm:"",files:[],msg:"",busy:false,todo:0};
