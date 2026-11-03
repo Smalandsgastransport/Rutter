@@ -435,6 +435,7 @@ function sumData(car){
     if(dd.trailer)O.trl.push([dayLabel(d),names[ck]||c.name,dd.trailer,String(act.length)]);
     O.perDag.push([d,names[ck]||c.name,(dd.driver||"").split(" ")[0],dd.trailer||"–",String(act.length),String(done),kg?sp(kg):"–"])})});
   O.hist=(H.dagar||[]).filter(d=>want(d.car)&&inR(d.datum));
+  O.fs=(H.fs||[]).filter(x=>want(x.car)&&inR(x.datum));
   return O;
 }
 function histBlock(car,O){
@@ -448,7 +449,12 @@ function histBlock(car,O){
   const sec=(t,h)=>'<div class="card" style="display:flex;flex-direction:column;gap:10px"><h3 style="font-size:19px">'+t+'</h3>'+h+'</div>';
   const fuel=CARS.filter(c=>car==="tot"||car===c[0]).map(([k,l])=>{const b=(H.bilar||{})[k]||{};return [l,b.reg||"–",b.fuel||"–",b.slap||"–"]});
   const perDag=O.hist.slice().sort((a,b)=>a.datum<b.datum?1:a.datum>b.datum?-1:0).map(d=>[d.datum,names[d.car]||d.car,(d.forare||"").split(" ")[0],n1(d.km),d.rutter&&d.rutter.length?String(d.rutter.filter(r=>r.slap).length)+" släp-rutter":(d.slapDag?"Ja":"Nej")]);
-  return (keys.length?sec("Kilometer",tbl(["Månad","Bil","Dagar","Km","Kundstopp","Km/stopp","Släp"],keys.map(k=>{const [ym,c]=k.split("|"),m=M[k];return [MN[+ym.slice(5)-1]+" "+ym.slice(0,4),names[c]||c,String(m.dagar),n1(m.km),m.r?String(m.kund):"–",m.r&&m.kund?n1(m.km/m.kund):"–",String(m.slap)]}),["Totalt","",String(tot.dagar),n1(tot.km),tot.r?String(tot.kund):"–",tot.r&&tot.kund?n1(tot.km/tot.kund):"–",String(tot.slap)]))
+  const FL=O.fs||[],grpFs=(typ)=>{const m={};FL.filter(x=>x.typ===typ).forEach(x=>{const g=m[x.fran]||(m[x.fran]={});g[x.till]=(g[x.till]||0)+x.antal});return m};
+  const gasBlock=()=>{if(!FL.length)return "";const lev=grpFs("lev"),ret=grpFs("ret");
+    const rows=[];Object.keys(lev).sort().forEach(f=>{const tot=Object.values(lev[f]).reduce((a,b)=>a+b,0);rows.push(["<b>"+f+"</b> (totalt)",String(tot),String(tot*14)]);Object.keys(lev[f]).sort((a,b)=>lev[f][b]-lev[f][a]).forEach(t=>rows.push(["  → "+t,String(lev[f][t]),String(lev[f][t]*14)]))});
+    const rr=[];Object.keys(ret).sort().forEach(f=>Object.keys(ret[f]).forEach(t=>rr.push([f+" → "+t,String(ret[f][t])])));
+    return sec("Gas per hämtställe och mottagare (fulla flak, enligt deklarationer)",tbl(["Hämtat från → levererat till","Flak","m³ (14/flak)"],rows.map(r=>[r[0].replace(/<\/?b>/g,""),r[1],r[2]]))+'<p class="muted" style="margin:0;font-size:13.5px">Historiska deklarationer anger nominellt 14 m³ per flak. Exakt mängd i kg redovisas från och med att chaufförerna anger tryck vid Lastad.</p>')+sec("Tomma flak åter (returer)",tbl(["Från station → till","Flak"],rr))};
+  return gasBlock()+(keys.length?sec("Kilometer",tbl(["Månad","Bil","Dagar","Km","Kundstopp","Km/stopp","Släp"],keys.map(k=>{const [ym,c]=k.split("|"),m=M[k];return [MN[+ym.slice(5)-1]+" "+ym.slice(0,4),names[c]||c,String(m.dagar),n1(m.km),m.r?String(m.kund):"–",m.r&&m.kund?n1(m.km/m.kund):"–",String(m.slap)]}),["Totalt","",String(tot.dagar),n1(tot.km),tot.r?String(tot.kund):"–",tot.r&&tot.kund?n1(tot.km/tot.kund):"–",String(tot.slap)]))
      :sec("Kilometer",'<p class="muted" style="margin:0">Ingen km-data för vald period.</p>'))+
     sec("Bil och bränsle",tbl(["Bil","Reg.nr","Bränsle","Släp"],fuel))+
     (perDag.length?sec("Körda dagar (milrapport)",tbl(["Datum","Bil","Förare","Km","Släp"],perDag)):"");
