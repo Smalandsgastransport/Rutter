@@ -259,6 +259,7 @@ async function loadBundle(){
 }
 async function afterLoad(){
   if(!S.bundle)return;
+  if(window.ARKIV)return akLoad();
   if(S.bundle.role==='admin'){await loadPlansAdmin();await loadNotes();await loadPauser();await loadSwaps();await loadStat();
     const ds=[...new Set([today(),iso(new Date(Date.now()+864e5)),S.pl.date||today(),S.date].filter(Boolean))];
     await Promise.all((S.bundle.planCars||[]).filter(c=>c.dir).map(async c=>{for(const d of (S.view==='paus'?[...new Set(ds.concat(pausDays()))]:ds)){await ghList(c.dir,d);await fetchNy(c.dir,d)}}))}
@@ -969,6 +970,7 @@ function render(){
     return}
   $("#topbar").hidden=false;$("#status").hidden=false;
   const car=(S.bundle&&S.bundle.car)||{name:""};
+  if(window.ARKIV){document.documentElement.classList.remove("wide");$("#ttl").textContent="Godsdeklarationer – arkiv";$("#sub").textContent="Körda transporter, sparade som PDF på den här datorn";M.innerHTML=akHtml();return}
   {const CP={bil1:["Hagelsrum","Arne Carlsson"],bil2:["Bor","Annelie Steen"],bil3:["Tånnö","Niklas Hellstrand"]},isDrv=S.bundle&&S.bundle.role==="driver",cp=isDrv&&CP[car.id];
    $("#ttl").textContent=isDrv?("Dagens rutt"+(cp?" – "+cp[0]:"")):"Transport Planering";
    if(isDrv){$("#sub").textContent=(car.name||"")+(cp?" · "+cp[1]:(car.driver?" · "+car.driver:""));}}
@@ -1107,6 +1109,85 @@ document.addEventListener("visibilitychange",()=>{if(document.visibilityState===
 setInterval(()=>{if(document.visibilityState==="visible"&&S.sess)refresh()},5*60*1000);
 setInterval(async()=>{if(document.visibilityState!=="visible"||!S.bundle)return;if(isOv()){await afterLoad();render()}else if(pendingCount()){await sync();render()}},60*1000);
 window.addEventListener("online",async()=>{if(S.bundle&&S.bundle.role==="driver"){await sync();render()}});
+/* ---------- Arkivappen: sparar körda godsdeklarationer som PDF i en mapp på datorn ---------- */
+S.ak={dir:null,perm:"",files:[],msg:"",busy:false,todo:0};
+const AKDB=()=>new Promise((ok,no)=>{const q=indexedDB.open("arkiv",1);q.onupgradeneeded=()=>q.result.createObjectStore("kv");q.onsuccess=()=>ok(q.result);q.onerror=()=>no(q.error)});
+async function akKv(k,v){const db=await AKDB();return new Promise((ok,no)=>{const t=db.transaction("kv",v===undefined?"readonly":"readwrite"),o=t.objectStore("kv"),q=v===undefined?o.get(k):o.put(v,k);q.onsuccess=()=>ok(q.result);q.onerror=()=>no(q.error)})}
+const akClean=x=>String(x||"").replace(/[\\/:*?"<>|]+/g," ").replace(/\s+/g," ").trim();
+async function akPerm(ask){const h=S.ak.dir;if(!h)return false;const o={mode:"readwrite"};let p=await h.queryPermission(o);if(p!=="granted"&&ask)p=await h.requestPermission(o);S.ak.perm=p;return p==="granted"}
+async function akInit(){if(S.ak.init)return;S.ak.init=true;if(!window.showDirectoryPicker)return;try{S.ak.dir=await akKv("dir")||null}catch(e){}
+  if(S.ak.dir){await akPerm(false);if(S.ak.perm==="granted")await akScanDisk()}}
+function akItems(){const out=[],t=today();
+  (S.bundle.planCars||[]).forEach(pc=>{if(!pc.dir)return;
+    Object.keys(S.plans).forEach(k=>{if(k.indexOf(pc.dir+"|")!==0)return;const d=k.slice(pc.dir.length+1);if(d>t)return;
+      const p=S.plans[k];if(!p||!p.legs||!p.legs.length)return;const r=planToRoute(p),st=statesFor(pc.dir,d);
+      allLegs(pc.dir,d,r.legs).forEach(l=>{if(l.deleted||!st.get(l.order+"|lossad"))return;
+        out.push({dir:pc.dir,date:d,car:akClean((pc.name||"Bil")+" "+(p.driver||pc.driver||"")),leg:l,r,name:akClean(l.order)+".pdf"})})})});
+  return out.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0)}
+async function akLoad(){
+  if(!S.bundle||S.bundle.role!=="admin"){S.ak.msg="Arkivet kräver inloggning som kontoret.";return}
+  await akInit();await loadPlansAdmin();
+  const t=today();
+  for(const pc of (S.bundle.planCars||[])){if(!pc.dir)continue;
+    for(const k of Object.keys(S.plans)){if(k.indexOf(pc.dir+"|")!==0)continue;const d=k.slice(pc.dir.length+1);if(d>t||store.get("akdone:"+k))continue;
+      if(!S.plans[k]||!S.plans[k].legs||!S.plans[k].legs.length)continue;
+      await ghList(pc.dir,d);await fetchNy(pc.dir,d)}}
+  if(S.ak.dir&&S.ak.perm==="granted")await akSync(false);else S.ak.todo=akItems().length}
+async function akWalk(root){const out=[];
+  async function go(h,path){for await(const [n,x] of h.entries()){if(x.kind==="directory")await go(x,path.concat(n));else if(/\.pdf$/i.test(n))out.push({path,name:n,h:x})}}
+  await go(root,[]);return out}
+async function akScanDisk(){try{S.ak.files=await akWalk(S.ak.dir)}catch(e){S.ak.files=[]}}
+async function akSync(ask){
+  if(S.ak.busy)return;if(!await akPerm(ask)){S.ak.todo=akItems().length;return}
+  S.ak.busy=true;let n=0,fail=0;
+  try{for(const it of akItems()){
+      try{let d=S.ak.dir;for(const part of [it.date.slice(0,4),it.date.slice(0,7),it.date,it.car])d=await d.getDirectoryHandle(part,{create:true});
+        let ex=false;try{await d.getFileHandle(it.name);ex=true}catch(e){}
+        if(ex)continue;
+        const blob=await makePdf([it.leg],it.r),fh=await d.getFileHandle(it.name,{create:true}),w=await fh.createWritable();await w.write(blob);await w.close();n++}
+      catch(e){fail++}}
+    // markera dagar där allt är sparat så att de inte hämtas om
+    const items=akItems(),by={};items.forEach(i=>(by[i.dir+"|"+i.date]=by[i.dir+"|"+i.date]||[]).push(i));
+    if(!fail)Object.keys(by).forEach(k=>{const d=k.split("|")[1];if(d<today()){const pl=S.plans[k];const all=pl.legs.length;if(by[k].length>=all)store.set("akdone:"+k,"1")}});
+    await akScanDisk();S.ak.todo=0;S.ak.msg=n?n+" nya deklarationer sparade.":(fail?fail+" kunde inte sparas.":"Allt är redan sparat.");S.ak.last=Date.now()}
+  finally{S.ak.busy=false}}
+function akHtml(){
+  if(!S.bundle)return '<div class="card muted">'+(S.err?esc(S.err):'Hämtar…')+'</div>';
+  if(S.bundle.role!=="admin")return '<div class="card">Arkivet är för kontoret. Logga ut och in med kontorets inloggning.</div>';
+  const A=S.ak,can=!!window.showDirectoryPicker;
+  let h='<div class="content" style="max-width:980px;margin:0 auto">';
+  if(!can)return h+'<div class="card"><b>Den här webbläsaren kan inte spara till en vald mapp.</b><p class="muted">Öppna arkivet i Chrome eller Edge på datorn. Då sparas varje PDF direkt på hårddisken.</p></div></div>';
+  h+='<div class="card" style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between"><div><b>Sparmapp på datorn</b><div class="muted" style="font-size:14px">'+(A.dir?esc(A.dir.name)+(A.perm==="granted"?" · ansluten":" · behöver ditt godkännande"):"Ingen vald än")+'</div></div><div class="acts">'+
+    '<button class="btn" data-ak="pick">'+(A.dir?"Byt mapp":"Välj mapp")+'</button>'+
+    (A.dir?'<button class="btn primary" data-ak="sync"'+(A.busy?' disabled':'')+'>'+(A.perm==="granted"?(A.busy?"Sparar…":"Spara nya nu"):"Ge åtkomst och spara")+'</button>':'')+'</div></div>'+
+    (A.msg?'<div class="notice">'+esc(A.msg)+'</div>':'')+
+    (A.dir&&A.perm!=="granted"?'<div class="notice warn">Webbläsaren frågar om lov igen varje gång appen startas. Tryck på <b>Ge åtkomst och spara</b>.</div>':'')+
+    (A.dir&&A.perm==="granted"&&A.todo?'<div class="notice warn">'+A.todo+' deklarationer väntar på att sparas.</div>':'')+
+    '<p class="muted" style="margin:0;font-size:13.5px">Allt sparas bara i mappen på den här datorn, aldrig i något moln. Varje transport som är markerad Lossad sparas som en PDF i mappen <i>år / månad / datum / bil och förare</i>. Redan sparade filer skrivs aldrig över.</p></div>';
+  if(!A.dir)return h+'</div>';
+  if(A.perm!=="granted")return h+'</div>';
+  const fs=A.files.slice().sort((a,b)=>(b.path.join("/")+b.name).localeCompare(a.path.join("/")+a.name));
+  h+='<div style="margin:14px 0 8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h2 style="margin:0">Sparade deklarationer <span class="muted" style="font-size:15px">('+fs.length+' st)</span></h2><input id="akq" placeholder="Sök på datum, bil, förare, order…" style="flex:1;min-width:220px;font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--fg)"></div>';
+  if(!fs.length)return h+'<div class="card muted">Inga sparade PDF:er än.</div></div>';
+  let last="";
+  fs.forEach((f,i)=>{const day=f.path[2]||f.path.join("/");
+    if(day!==last){last=day;h+='<div class="akday muted" data-akday style="margin:14px 0 4px;font-weight:600">'+esc(day)+'</div>'}
+    h+='<button class="card akrow" data-ak="open" data-i="'+A.files.indexOf(f)+'" data-q="'+esc((f.path.join(" ")+" "+f.name).toLowerCase())+'" style="display:flex;width:100%;text-align:left;gap:12px;align-items:center;justify-content:space-between;margin:0 0 6px;padding:11px 14px;cursor:pointer"><span><b>'+esc(f.name.replace(/\.pdf$/i,""))+'</b> <span class="muted">· '+esc(f.path[3]||"")+'</span></span><span class="muted">Öppna ›</span></button>'});
+  return h+'</div>'}
+function akClose(){const o=document.getElementById("akview");if(o){const f=o.querySelector("iframe");if(f)URL.revokeObjectURL(f.dataset.u);o.remove()}}
+document.addEventListener("click",async e=>{
+  if(!window.ARKIV)return;const t=e.target.closest("[data-ak]");if(!t)return;const a=t.dataset.ak;
+  if(a==="pick"){try{const h=await showDirectoryPicker({mode:"readwrite",id:"gods-arkiv"});S.ak.dir=h;await akKv("dir",h);await akPerm(true);await akScanDisk();S.ak.msg="";await akSync(false)}catch(err){if(err&&err.name!=="AbortError")S.ak.msg="Kunde inte välja mappen."}render();return}
+  if(a==="sync"){S.ak.msg="";render();await akSync(true);render();return}
+  if(a==="open"){const f=S.ak.files[+t.dataset.i];if(!f)return;
+    try{const file=await f.h.getFile(),u=URL.createObjectURL(new Blob([await file.arrayBuffer()],{type:"application/pdf"}));akClose();
+      const o=document.createElement("div");o.id="akview";o.style.cssText="position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.6);display:flex;flex-direction:column;padding:16px;gap:8px";
+      o.innerHTML='<div style="display:flex;gap:10px;align-items:center;justify-content:space-between;color:#fff"><b>'+esc(f.name)+'</b><button class="btn" data-ak="close" style="color:#111">Stäng</button></div><iframe data-u="'+u+'" src="'+u+'" style="flex:1;border:0;background:#fff;border-radius:4px"></iframe>';
+      document.body.appendChild(o)}catch(err){S.ak.msg="Kunde inte öppna filen.";render()}return}
+  if(a==="close")akClose()});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")akClose()});
+document.addEventListener("input",e=>{if(e.target.id!=="akq")return;const q=e.target.value.trim().toLowerCase();document.querySelectorAll(".akrow").forEach(b=>b.hidden=!!q&&b.dataset.q.indexOf(q)<0)});
+
 if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
 refresh();
 })();

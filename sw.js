@@ -1,7 +1,7 @@
 // Gör appen användbar utan nät. Allt hämtas från nätet i första hand, så att nya versioner syns direkt;
 // den sparade kopian används bara när nätet saknas.
-const SHELL="shell-v33";
-const FILES=["./","index.html","manifest.webmanifest","icon-180.png","icon-192.png","icon-512.png","logo.svg","decl-logo.png"];
+const SHELL="shell-v34";
+const FILES=["./","index.html","manifest.webmanifest","arkiv.html","arkiv.webmanifest","icon-180.png","icon-192.png","icon-512.png","logo.svg","decl-logo.png"];
 self.addEventListener("install",e=>{e.waitUntil(caches.open(SHELL).then(c=>c.addAll(FILES.map(f=>new Request(f,{cache:"reload"})))).then(()=>self.skipWaiting()))});
 self.addEventListener("activate",e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==SHELL&&k!=="pdf-v2").map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
 self.addEventListener("fetch",e=>{
@@ -11,7 +11,7 @@ self.addEventListener("fetch",e=>{
   e.respondWith(fetch(e.request,{cache:"no-store"}).then(r=>{
     if(r.ok){const cp=r.clone();
       if(isPdf)caches.open("pdf-v2").then(c=>c.put(u.pathname,cp));
-      else if(!u.pathname.includes("/data/"))caches.open(SHELL).then(c=>c.put(e.request.mode==="navigate"?"index.html":e.request,cp));}
+      else if(!u.pathname.includes("/data/"))caches.open(SHELL).then(c=>c.put(e.request.mode==="navigate"?(u.pathname.endsWith("arkiv.html")?"arkiv.html":"index.html"):e.request,cp));}
     return r;
-  }).catch(()=>caches.match(isPdf?u.pathname:e.request).then(m=>m||(e.request.mode==="navigate"?caches.match("index.html"):caches.match(u.pathname)))));
+  }).catch(()=>caches.match(isPdf?u.pathname:e.request).then(m=>m||(e.request.mode==="navigate"?caches.match(u.pathname.endsWith("arkiv.html")?"arkiv.html":"index.html"):caches.match(u.pathname)))));
 });
