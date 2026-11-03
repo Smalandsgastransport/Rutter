@@ -407,48 +407,64 @@ function legActs(st,l,approved){
 function isOv(){return !!S.bundle&&(S.bundle.role==="admin"||S.bundle.role==="ekonomi")}
 S.view="ov";
 function tbl(head,rows,foot){return '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:15px"><thead><tr>'+head.map((h,i)=>'<th style="text-align:'+(i?'right':'left')+';padding:6px 8px;border-bottom:2px solid var(--line);white-space:nowrap">'+esc(h)+'</th>').join("")+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map((c,i)=>'<td style="text-align:'+(i?'right':'left')+';padding:6px 8px;border-bottom:1px solid var(--line)">'+esc(c)+'</td>').join("")+'</tr>').join("")+(foot?'<tr>'+foot.map((c,i)=>'<td style="text-align:'+(i?'right':'left')+';padding:6px 8px;font-weight:700">'+esc(c)+'</td>').join("")+'</tr>':'')+'</tbody></table></div>'}
-function histCards(){
-  const H=S.bundle.hist;
-  if(!H||!H.dagar||!H.dagar.length)return '<div class="card"><h3 style="font-size:19px">Kilometer och bränsle</h3><p class="muted" style="margin:6px 0 0">Ingen km-data inlagd än.</p></div>';
-  const MN=["januari","februari","mars","april","maj","juni","juli","augusti","september","oktober","november","december"],names={bil1:"Bil 1",bil2:"Bil 2",bil3:"Bil 3"};
-  const n1=x=>(Math.round(x*10)/10).toLocaleString("sv-SE");
-  const M={};H.dagar.forEach(d=>{const k=d.datum.slice(0,7)+"|"+d.car,m=M[k]||(M[k]={dagar:0,km:0,rut:0,kund:0,slap:0,r:false});m.dagar++;m.km+=d.km||0;
-    if(d.rutter&&d.rutter.length){m.r=true;d.rutter.forEach(r=>{m.rut++;m.kund+=r.kund||0;if(r.slap)m.slap++})}else if(d.slapDag)m.slap++});
-  const row=(k,m)=>{const [ym,car]=k.split("|");return [MN[+ym.slice(5)-1]+" "+ym.slice(0,4),names[car]||car,String(m.dagar),n1(m.km),m.r?String(m.kund):"–",m.r&&m.kund?n1(m.km/m.kund):"–",String(m.slap)]};
-  const keys=Object.keys(M).sort();
-  const tot=Object.values(M).reduce((a,m)=>({dagar:a.dagar+m.dagar,km:a.km+m.km}),{dagar:0,km:0});
-  const fuel=Object.keys(H.bilar||{}).map(k=>[names[k]||k,H.bilar[k].reg||"–",H.bilar[k].fuel||"–",H.bilar[k].slap||"–"]);
-  const perDag=H.dagar.slice().sort((a,b)=>a.datum<b.datum?1:a.datum>b.datum?-1:0).map(d=>[d.datum,names[d.car]||d.car,(d.forare||"").split(" ")[0],n1(d.km),d.rutter&&d.rutter.length?String(d.rutter.filter(r=>r.slap).length)+" släp-rutter":(d.slapDag?"Ja":"Nej")]);
-  const sec=(t,h)=>'<div class="card" style="display:flex;flex-direction:column;gap:10px"><h3 style="font-size:19px">'+t+'</h3>'+h+'</div>';
-  return sec("Kilometer (från milrapporterna)",tbl(["Månad","Bil","Dagar","Km","Kundstopp","Km/stopp","Släp"],keys.map(k=>row(k,M[k])),["Totalt","",String(tot.dagar),n1(tot.km),"","",""])+'<p class="muted" style="margin:0;font-size:13.5px">Kundstopp finns bara för bilar där milrapporten delar upp dagen i rutter (Bil 1). Släp för Bil 3 = dagar då släpet följde med.</p>')+
-    sec("Bilar och bränsle",tbl(["Bil","Reg.nr","Bränsle","Släp"],fuel))+
-    sec("Körda dagar (historik)",tbl(["Datum","Bil","Förare","Km","Släp"],perDag));
+const CARS=[["bil1","Bil 1"],["bil2","Bil 2"],["bil3","Bil 3"]];
+S.sumTab="tot";S.from="";S.to="";
+const carKey=n=>"bil"+String(n||"").replace(/\D/g,"");
+const inR=d=>(!S.from||d>=S.from)&&(!S.to||d<=S.to);
+function sumTop(){
+  const q=(l,a,b)=>'<button class="chip" data-range="'+a+'|'+b+'"'+(S.from===a&&S.to===b?' aria-current="date"':'')+'>'+l+'</button>';
+  const tab=(k,l)=>'<button class="chip" data-sumtab="'+k+'"'+(S.sumTab===k?' aria-current="date"':'')+'>'+l+'</button>';
+  const inp='style="font:inherit;font-size:16px;padding:8px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--fg)"';
+  return '<div class="chips">'+CARS.map(c=>tab(c[0],c[1])).join("")+tab("tot","Totalt")+'</div>'+
+   '<div class="card" style="display:flex;flex-direction:column;gap:10px"><b>Period</b><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><label class="muted" style="font-size:14px">Från <input type="date" id="rFrom" value="'+esc(S.from)+'" '+inp+'></label><label class="muted" style="font-size:14px">Till <input type="date" id="rTo" value="'+esc(S.to)+'" '+inp+'></label></div>'+
+   '<div class="chips">'+q("Alla","","")+q("September","2026-09-01","2026-09-30")+q("Oktober","2026-10-01","2026-10-31")+q("November","2026-11-01","2026-11-30")+'</div></div>';
 }
-function renderSum(){
-  const B=S.bundle,days=[],byFrom={},byTo={},byCar={},T={legs:0,done:0,kg:0,rep:0,fullN:0,flak:0,trl:0},trl=[];
+function sumData(car){
+  const B=S.bundle,H=B.hist||{dagar:[],bilar:{}},names=Object.fromEntries(CARS);
+  const want=k=>car==="tot"||car===k;
+  const n1=x=>(Math.round(x*10)/10).toLocaleString("sv-SE");
+  const O={legs:0,done:0,kg:0,rep:0,fullN:0,trl:[],byFrom:{},byTo:{},perDag:[],hist:[]};
   const add=(o,k,kg,fl)=>{const x=o[k]||(o[k]={n:0,fl:0,kg:0});x.n++;x.fl+=fl;x.kg+=kg||0};
-  B.cars.forEach(c=>Object.keys(c.days).sort().forEach(d=>{
+  B.cars.forEach(c=>{const ck=carKey(c.name);if(!want(ck))return;Object.keys(c.days).sort().forEach(d=>{if(!inR(d))return;
     const dd=c.days[d],st=statesFor(c.dir,d);
     const act=allLegs(c.dir,d,dd.legs.map(l=>Object.assign({},l,{from:{name:l.from},to:{name:l.to}}))).filter(l=>!l.deleted);
     let kg=0,done=0;
-    act.forEach(l=>{const fl=l.antal||1;if(st.get(l.order+"|lossad"))done++;if(l.load==="full"){T.fullN++;if(l.kg!=null){kg+=l.kg;T.rep++}}
-      if(l.load==="full"){T.flak+=fl;if(String(l.from.name).indexOf("Påfyllning")===0)add(byFrom,l.from.name,l.kg,fl);add(byTo,l.to.name,l.kg,fl)}
-      const x=byCar[c.name]||(byCar[c.name]={n:0,kg:0,trl:0});x.n++;x.kg+=l.load==='full'?(l.kg||0):0;if(dd.trailer){x.trl++;T.trl++}});
-    T.legs+=act.length;T.done+=done;T.kg+=kg;
-    if(dd.trailer)trl.push([dayLabel(d),c.name,dd.trailer,String(act.length)]);
-    days.push([d,c.name,(dd.driver||"").split(" ")[0],dd.trailer||"–",String(act.length),String(done),kg?sp(kg):"–"]);
-  }));
-  days.sort((a,b)=>a[0]<b[0]?1:a[0]>b[0]?-1:0);
+    act.forEach(l=>{const fl=l.antal||1;if(st.get(l.order+"|lossad"))done++;
+      if(l.load==="full"){O.fullN++;if(l.kg!=null){kg+=l.kg;O.rep++}add(O.byTo,l.to.name,l.kg,fl);if(String(l.from.name).indexOf("Påfyllning")===0)add(O.byFrom,l.from.name,l.kg,fl)}});
+    O.legs+=act.length;O.done+=done;O.kg+=kg;
+    if(dd.trailer)O.trl.push([dayLabel(d),names[ck]||c.name,dd.trailer,String(act.length)]);
+    O.perDag.push([d,names[ck]||c.name,(dd.driver||"").split(" ")[0],dd.trailer||"–",String(act.length),String(done),kg?sp(kg):"–"])})});
+  O.hist=(H.dagar||[]).filter(d=>want(d.car)&&inR(d.datum));
+  return O;
+}
+function histBlock(car,O){
+  const H=S.bundle.hist||{dagar:[],bilar:{}},names=Object.fromEntries(CARS);
+  const MN=["januari","februari","mars","april","maj","juni","juli","augusti","september","oktober","november","december"];
+  const n1=x=>(Math.round(x*10)/10).toLocaleString("sv-SE");
+  const M={};O.hist.forEach(d=>{const k=d.datum.slice(0,7)+"|"+d.car,m=M[k]||(M[k]={dagar:0,km:0,rut:0,kund:0,slap:0,r:false});m.dagar++;m.km+=d.km||0;
+    if(d.rutter&&d.rutter.length){m.r=true;d.rutter.forEach(r=>{m.rut++;m.kund+=r.kund||0;if(r.slap)m.slap++})}else if(d.slapDag)m.slap++});
+  const keys=Object.keys(M).sort();
+  const tot=Object.values(M).reduce((a,m)=>({dagar:a.dagar+m.dagar,km:a.km+m.km,kund:a.kund+m.kund,slap:a.slap+m.slap,r:a.r||m.r}),{dagar:0,km:0,kund:0,slap:0,r:false});
+  const sec=(t,h)=>'<div class="card" style="display:flex;flex-direction:column;gap:10px"><h3 style="font-size:19px">'+t+'</h3>'+h+'</div>';
+  const fuel=CARS.filter(c=>car==="tot"||car===c[0]).map(([k,l])=>{const b=(H.bilar||{})[k]||{};return [l,b.reg||"–",b.fuel||"–",b.slap||"–"]});
+  const perDag=O.hist.slice().sort((a,b)=>a.datum<b.datum?1:a.datum>b.datum?-1:0).map(d=>[d.datum,names[d.car]||d.car,(d.forare||"").split(" ")[0],n1(d.km),d.rutter&&d.rutter.length?String(d.rutter.filter(r=>r.slap).length)+" släp-rutter":(d.slapDag?"Ja":"Nej")]);
+  return (keys.length?sec("Kilometer",tbl(["Månad","Bil","Dagar","Km","Kundstopp","Km/stopp","Släp"],keys.map(k=>{const [ym,c]=k.split("|"),m=M[k];return [MN[+ym.slice(5)-1]+" "+ym.slice(0,4),names[c]||c,String(m.dagar),n1(m.km),m.r?String(m.kund):"–",m.r&&m.kund?n1(m.km/m.kund):"–",String(m.slap)]}),["Totalt","",String(tot.dagar),n1(tot.km),tot.r?String(tot.kund):"–",tot.r&&tot.kund?n1(tot.km/tot.kund):"–",String(tot.slap)]))
+     :sec("Kilometer",'<p class="muted" style="margin:0">Ingen km-data för vald period.</p>'))+
+    sec("Bil och bränsle",tbl(["Bil","Reg.nr","Bränsle","Släp"],fuel))+
+    (perDag.length?sec("Körda dagar (milrapport)",tbl(["Datum","Bil","Förare","Km","Släp"],perDag)):"");
+}
+function renderSum(){
+  const car=S.sumTab||"tot",O=sumData(car),names=Object.fromEntries(CARS);
   const sec=(t,h)=>'<div class="card" style="display:flex;flex-direction:column;gap:10px"><h3 style="font-size:19px">'+t+'</h3>'+h+'</div>';
   const grp=o=>Object.keys(o).sort((a,b)=>o[b].kg-o[a].kg).map(k=>[k,String(o[k].n),String(o[k].fl),o[k].kg?sp(o[k].kg):"–"]);
-  return '<h2>Sammanställning</h2>'+
-   sec("Totalt",'<div class="stats"><div class="stat"><span class="k">Körningar</span><span class="v">'+T.legs+'</span></div><div class="stat"><span class="k">Lossade</span><span class="v">'+T.done+'</span></div><div class="stat"><span class="k">Levererat kg</span><span class="v">'+sp(T.kg)+'</span></div><div class="stat"><span class="k">Med släp</span><span class="v">'+T.trl+'</span></div></div><p class="muted" style="margin:0;font-size:14px">Kilogram räknas från tryck och flaknummer som chauffören anger vid Lastad ('+T.rep+' av '+T.fullN+' fulla körningar rapporterade).</p>')+
-   histCards()+
-   sec("Gasen hämtas från (fulla flak)",tbl(["Plats","Körn.","Flak","kg"],grp(byFrom)))+
-   sec("Levererat till (fulla flak)",tbl(["Plats","Körn.","Flak","kg"],grp(byTo)))+
-   sec("Per bil",tbl(["Bil","Körn.","Med släp","kg"],Object.keys(byCar).map(k=>[k,String(byCar[k].n),String(byCar[k].trl),byCar[k].kg?sp(byCar[k].kg):"–"])))+
-   sec("Körningar med släp",trl.length?tbl(["Dag","Bil","Släp","Körn."],trl):'<p class="muted" style="margin:0">Inga.</p>')+
-   sec("Per dag",tbl(["Datum","Bil","Förare","Släp","Körn.","Lossade","kg"],days));
+  const hkm=O.hist.reduce((a,d)=>a+(d.km||0),0),trlD=O.hist.filter(d=>d.slapDag||(d.rutter||[]).some(r=>r.slap)).length+O.trl.length;
+  const per=S.from||S.to?(S.from||"…")+" – "+(S.to||"…"):"Alla datum";
+  return sumTop()+'<h2>'+(car==="tot"?"Totalt":names[car])+'</h2><p class="muted" style="margin:0">'+esc(per)+'</p>'+
+   sec("Sammanfattning",'<div class="stats"><div class="stat"><span class="k">Km</span><span class="v">'+sp(hkm)+'</span></div><div class="stat"><span class="k">Körda dagar</span><span class="v">'+(O.hist.length+new Set(O.perDag.map(r=>r[0]+r[1])).size)+'</span></div><div class="stat"><span class="k">Dagar med släp</span><span class="v">'+trlD+'</span></div><div class="stat"><span class="k">Levererat kg</span><span class="v">'+sp(O.kg)+'</span></div></div><p class="muted" style="margin:0;font-size:14px">Km kommer från milrapporterna. Kg räknas från tryck och flaknummer som chauffören anger vid Lastad ('+O.rep+' av '+O.fullN+' fulla körningar i appen rapporterade).</p>')+
+   histBlock(car,O)+
+   (O.legs?sec("Gasen hämtas från (fulla flak)",tbl(["Plats","Körn.","Flak","kg"],grp(O.byFrom)))+sec("Levererat till (fulla flak)",tbl(["Plats","Körn.","Flak","kg"],grp(O.byTo)))+
+   sec("Körningar med släp (appen)",O.trl.length?tbl(["Dag","Bil","Släp","Körn."],O.trl):'<p class="muted" style="margin:0">Inga.</p>')+
+   sec("Rapporterat i appen per dag",tbl(["Datum","Bil","Förare","Släp","Körn.","Lossade","kg"],O.perDag.sort((a,b)=>a[0]<b[0]?1:-1))):"");
 }
 function renderAdmin(){
   const ds=days(),B=S.bundle;let h='';
@@ -513,6 +529,8 @@ document.addEventListener("click",async e=>{
   const t=e.target.closest("button");if(!t||t.getAttribute("type")==="submit")return;
   if(t.id==="switch"){logout("");return}
   if(t.id==="refresh"){t.disabled=true;await refresh();t.disabled=false;toast(S.offline?"Ingen kontakt – visar senast hämtade.":"Uppdaterad.");return}
+  if(t.dataset.sumtab){S.sumTab=t.dataset.sumtab;render();window.scrollTo(0,0);return}
+  if(t.dataset.range!==undefined){const [a,b]=t.dataset.range.split("|");S.from=a;S.to=b;render();return}
   if(t.dataset.view){S.view=t.dataset.view;render();await afterLoad();render();return}
   if(t.dataset.date){S.date=t.dataset.date;render();window.scrollTo(0,0);await afterLoad();render();return}
   if(t.dataset.lastopen){S.lastForm={order:t.dataset.lastopen,nr:[],vol:[],bar:[],ask:false,err:""};render();return}
@@ -532,7 +550,7 @@ document.addEventListener("click",async e=>{
   if(t.dataset.save){t.disabled=true;await savePdf(t.dataset.save,t.dataset.name);t.disabled=false;return}
 });
 document.addEventListener("input",e=>{const t=e.target;if(t.dataset&&t.dataset.lfp!==undefined){readLast();const p=document.querySelector('[data-lfprev="'+t.dataset.lfp+'"]');if(p)p.textContent=prevTxt(S.lastForm,+t.dataset.lfp)}});
-document.addEventListener("change",e=>{const t=e.target;if(t.dataset&&t.dataset.lfn!==undefined&&S.lastForm){readLast();const i=+t.dataset.lfn,p=document.querySelector('[data-lfinfo="'+i+'"]');if(p)p.innerHTML=infoTxt(S.lastForm,i);const q=document.querySelector('[data-lfprev="'+i+'"]');if(q)q.textContent=prevTxt(S.lastForm,i)}});
+document.addEventListener("change",e=>{const t=e.target;if(t.id==="rFrom"||t.id==="rTo"){S[t.id==="rFrom"?"from":"to"]=t.value;render();return}if(t.dataset&&t.dataset.lfn!==undefined&&S.lastForm){readLast();const i=+t.dataset.lfn,p=document.querySelector('[data-lfinfo="'+i+'"]');if(p)p.innerHTML=infoTxt(S.lastForm,i);const q=document.querySelector('[data-lfprev="'+i+'"]');if(q)q.textContent=prevTxt(S.lastForm,i)}});
 document.addEventListener("submit",e=>{if(e.target.id==="loginForm"){e.preventDefault();const u=$("#user").value.trim(),pw=$("#pw").value.trim();if(!u||!pw){S.err="Fyll i användarnamn och lösenord.";render();return}login(u,pw)}});
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&S.sess)refresh()});
 setInterval(()=>{if(document.visibilityState==="visible"&&S.sess)refresh()},5*60*1000);
