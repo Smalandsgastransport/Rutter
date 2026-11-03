@@ -114,7 +114,9 @@ html.wide #main{display:flex;flex-direction:column;gap:18px}
 .notice.msg{background:var(--blue-soft);color:var(--fg);border-left:4px solid var(--blue)}
 .p-warn{background:var(--warn-bg);color:var(--warn)}
 
-.cargrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:16px;align-items:start}
+.cargrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start}
+@media (max-width:1250px){.cargrid{grid-template-columns:1fr}}
+.cargrid .ov-row{grid-template-columns:auto minmax(0,1fr)}.cargrid .ov-row .ov-st{grid-column:2;display:flex;gap:6px;flex-wrap:wrap}
 .cargrid .ov-car{margin:0}
 .side{background:#0e3b1d;border-color:#0e3b1d;padding:14px 10px;gap:4px;box-shadow:0 6px 18px rgba(14,59,29,.18)}
 .side button{color:#d6ecdb;font-weight:500;padding:12px 14px}
@@ -852,10 +854,10 @@ function renderAdmin(){
    h+='<div class="tiles"><div class="tile"><span class="k">Bilar utskickade</span><span class="v">'+cs.length+' <small>av '+((B.planCars||[]).length||3)+'</small></span></div><div class="tile"><span class="k">Godkända</span><span class="v">'+nG+' <small>av '+cs.length+'</small></span></div><div class="tile"><span class="k">Lossade</span><span class="v">'+nU+' <small>av '+nL+'</small></span></div><div class="tile'+(nn?' hot':'')+'"><span class="k">Aviseringar</span><span class="v">'+nn+'</span></div></div>'+notisCard(D)+swapAdminCard()}
   if(!B.status)h+='<div class="notice warn">Rapporteringen är inte inkopplad än. Godkänn, Lastad och Lossad syns här när den är klar.</div>';
   if(ds.length)h+='<div class="chips">'+ds.map(d=>'<button class="chip" data-date="'+d+'"'+(d===S.date?' aria-current="date"':'')+'>'+esc(dayLabel(d))+'</button>').join("")+'</div>';
-  const cars=B.cars.filter(c=>S.date&&c.days[S.date]);
-  if(!cars.length)return h+'<div class="card">Inga utskickade rutter för den här dagen.</div>';
-  h+='<h2>'+esc(dayLabel(S.date))+'</h2><div class="cargrid">';
-  cars.forEach(c=>{const d=c.days[S.date],st=statesFor(c.dir,S.date),g=st.get("dag|godkand");
+  const cars=B.cars,DD=S.date||today();if(!S.date)S.date=DD;
+  h+='<h2>'+esc(dayLabel(DD))+'</h2><div class="cargrid">';
+  cars.forEach(c=>{const d=c.days[S.date];if(!d){const pc=(B.planCars||[]).find(x=>x.dir===c.dir)||{};h+='<div class="card ov-car"><h3 style="font-size:20px">'+esc(c.name)+(pc.driver?' · '+esc(pc.driver.split(" ")[0]):'')+'</h3><p class="muted" style="margin:0">Ingen rutt utskickad den här dagen.</p></div>';return}
+    const st=statesFor(c.dir,S.date),g=st.get("dag|godkand");
     const legs=allLegs(c.dir,S.date,d.legs.map(l=>Object.assign({},l,{from:{name:l.from},to:{name:l.to}}))),act=legs.filter(l=>!l.deleted);
     const nU=act.filter(l=>st.get(l.order+"|lossad")).length,pct=act.length?Math.round(100*nU/act.length):0;
     h+='<div class="card ov-car"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline"><h3 style="font-size:20px">'+esc(c.name)+(d.driver?' · '+esc(d.driver.split(" ")[0]):'')+'</h3>'+(d.self?'<span class="tag" style="background:var(--blue-soft);color:var(--blue)">Förarens egen bokning</span>':'')+(g?'<span class="done">✓ Godkänd '+esc(hhmm(g.ts))+'</span>':'<span class="done wait">Inte godkänd</span>')+'</div>'+
