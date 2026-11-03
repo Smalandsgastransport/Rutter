@@ -1,11 +1,11 @@
 {
-  "name": "Min rutt – Småländska Bränslen",
+  "name": "Min rutt – Smålands Gastransport",
   "short_name": "Min rutt",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f2f4f6",
-  "theme_color": "#1f5fa8",
+  "background_color": "#ffffff",
+  "theme_color": "#00932a",
   "lang": "sv",
   "icons": [
     {"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},

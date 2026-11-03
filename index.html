@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Min rutt</title>
-<meta name="theme-color" content="#1f5fa8">
+<meta name="theme-color" content="#00932a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -15,7 +15,7 @@
 <style>
 :root{
   --bg:#f2f4f6;--surface:#fff;--sunk:#e7ebef;--line:#d2d9e0;--fg:#17202a;--muted:#566473;
-  --accent:#1f5fa8;--accent-fg:#fff;--accent-soft:#e1ebf7;--adr:#d7261e;
+  --accent:#00932a;--accent-fg:#fff;--accent-soft:#e2f4e5;--blue:#1f5fa8;--blue-soft:#e1ebf7;--brand:#00aa13;--adr:#d7261e;
   --full:#1d7a4a;--full-bg:#e1f2e8;--empty:#6b5a2a;--empty-bg:#f6eed6;--warn:#9a5b00;--warn-bg:#fdf0d6;
   --f-display:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
   --f-body:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
@@ -23,7 +23,7 @@
 }
 @media (prefers-color-scheme:dark){:root{
   --bg:#10151b;--surface:#19212a;--sunk:#222b35;--line:#33404d;--fg:#e6ebf0;--muted:#9aa7b4;
-  --accent:#6aa5ec;--accent-fg:#0b1520;--accent-soft:#1a2c42;--adr:#e2463e;
+  --accent:#3fc163;--accent-fg:#06200d;--accent-soft:#163020;--blue:#6aa5ec;--blue-soft:#1a2c42;--brand:#3fc163;--adr:#e2463e;
   --full:#6cc48f;--full-bg:#16301f;--empty:#e0c47a;--empty-bg:#33290f;--warn:#e6a64a;--warn-bg:#3a2c12;color-scheme:dark}}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
@@ -61,9 +61,9 @@ button,a.btn{font:inherit;color:inherit}
 .pill{display:inline-block;font-size:13px;font-weight:700;padding:2px 10px;border-radius:999px;white-space:nowrap}
 .p-full{background:var(--full-bg);color:var(--full)}
 .p-tom{background:var(--empty-bg);color:var(--empty)}
-.p-del{background:var(--accent-soft);color:var(--accent)}
+.p-del{background:var(--blue-soft);color:var(--blue)}
 .p-type{background:var(--sunk);color:var(--fg)}
-.p-antal{background:var(--accent-soft);color:var(--accent);border:1.5px solid var(--accent);font-size:14.5px;font-weight:800}
+.p-antal{background:var(--blue-soft);color:var(--blue);border:1.5px solid var(--blue);font-size:14.5px;font-weight:800}
 .route{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:10px;align-items:start}
 .route .arrow{font-size:22px;color:var(--muted);padding-top:14px}
 .route .k{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
@@ -75,14 +75,23 @@ button,a.btn{font:inherit;color:inherit}
 .notice{padding:10px 14px;border-radius:10px;background:var(--accent-soft);font-size:15px}
 .notice.warn{background:var(--warn-bg)}
 .status{font-size:13.5px;color:var(--muted)}
+.login{min-height:calc(100vh - 80px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;padding-block:24px}
+.login .logo{width:min(440px,82vw);height:auto}
+.login form{width:min(380px,100%);display:flex;flex-direction:column;gap:12px}
+.login h2{text-align:center;font-size:24px}
+.login label{display:flex;flex-direction:column;gap:6px;font-size:14.5px;color:var(--muted)}
+.login input{font:inherit;font-size:18px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--fg)}
+.login input:focus{outline:2px solid var(--accent);outline-offset:1px}
+.minilogo{height:34px;width:auto}
+html.out,html.out body{background:var(--surface)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:12px 18px;border-radius:10px;font-size:15px;z-index:30;max-width:calc(100% - 32px)}
 [hidden]{display:none!important}
 </style>
 </head>
 <body>
 <div class="wrap" id="app">
-  <div class="top">
-    <div class="brand"><div class="diamond" aria-hidden="true"><span>2.1</span></div><div><h1>Min rutt</h1><p id="sub">Laddar…</p></div></div>
+  <div class="top" id="topbar">
+    <div class="brand"><img class="minilogo" src="logo.svg" alt="Smålands Gastransport"><div><h1>Min rutt</h1><p id="sub">Laddar…</p></div></div>
     <div class="acts"><button class="btn small" id="refresh">Uppdatera</button><button class="btn small" id="switch" hidden>Byt bil</button></div>
   </div>
   <div id="main"></div>
@@ -119,16 +128,17 @@ async function loadCars(){
   try{const r=await fetch("data/bilar.json?t="+Date.now(),{cache:"no-store"});if(!r.ok)throw 0;S.cars=await r.json();S.offline=false;store.set("bilar",JSON.stringify(S.cars))}
   catch(e){S.offline=true;try{S.cars=JSON.parse(store.get("bilar")||"null")}catch(x){}}
 }
-function carOf(id){return S.cars&&S.cars.cars.find(c=>c.id===id)}
+function carOf(u){return S.cars&&S.cars.cars.find(c=>c.u===u)}
+async function userHash(n){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("rutt:"+n.trim().toLowerCase()));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join("")}
 async function loadBundle(){
-  const car=carOf(S.sess.car);if(!car)throw new Error("bil");
+  const car=carOf(S.sess.u);if(!car)throw new Error("bil");
   if(!S.key)S.key=await deriveKey(S.sess.pw,car);
   let buf=null;
-  try{buf=await fetchBin("data/"+car.dir+"/rutt.bin");store.set("rutt:"+car.id,b64(buf))}
-  catch(e){const c=store.get("rutt:"+car.id);if(!c)throw e;buf=unb64(c).buffer;S.offline=true}
+  try{buf=await fetchBin("data/"+car.dir+"/rutt.bin");store.set("rutt:"+car.dir,b64(buf))}
+  catch(e){const c=store.get("rutt:"+car.dir);if(!c)throw e;buf=unb64(c).buffer;S.offline=true}
   const json=JSON.parse(new TextDecoder().decode(await open(S.key,buf)));
   const prev=S.bundle;S.bundle=json;pickDate();
-  const r=route();if(r){const k="seen:"+car.id+":"+r.date;const seen=store.get(k);S.changed=!!(seen&&seen!==r.updated);store.set(k,r.updated);prefetch(car,r)}
+  const r=route();if(r){const k="seen:"+car.dir+":"+r.date;const seen=store.get(k);S.changed=!!(seen&&seen!==r.updated);store.set(k,r.updated);prefetch(car,r)}
 }
 async function refresh(){
   S.busy=true;render();await loadCars();
@@ -141,7 +151,7 @@ function route(){return S.bundle&&S.date?S.bundle.days[S.date]:null}
 function prefetch(car,r){if(!("caches" in window))return;caches.open("pdf-v2").then(c=>[r.allPdf].concat(r.legs.map(l=>l.pdf)).forEach(f=>{const u="data/"+car.dir+"/"+f;c.match(new URL(u,location.href).pathname).then(m=>{if(!m)fetch(u).then(res=>{if(res.ok)c.put(new URL(u,location.href).pathname,res)}).catch(()=>{})})})).catch(()=>{})}
 async function savePdf(file,name){
   try{
-    const car=carOf(S.sess.car);const buf=await fetchBin("data/"+car.dir+"/"+file);
+    const car=carOf(S.sess.u);const buf=await fetchBin("data/"+car.dir+"/"+file);
     const blob=new Blob([await open(S.key,buf)],{type:"application/pdf"});
     const f=new File([blob],name,{type:"application/pdf"});
     if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:name});return}catch(e){if(e&&e.name==="AbortError")return}}
@@ -149,31 +159,34 @@ async function savePdf(file,name){
   }catch(e){toast("Kunde inte spara PDF:en. Kontrollera nätet och försök igen.")}
 }
 function logout(msg){S.sess=null;S.key=null;S.bundle=null;S.date=null;store.set("sess",null);S.err=msg||"";render()}
-async function login(carId,pw){
-  const car=carOf(carId);if(!car)return;
+async function login(user,pw){
   S.busy=true;S.err="";render();
+  const u=await userHash(user),car=carOf(u);
+  if(!car){S.busy=false;S.err="Fel användarnamn eller lösenord.";render();return}
   try{const key=await deriveKey(pw,car);const buf=await fetchBin("data/"+car.dir+"/rutt.bin");await open(key,buf);
-    S.sess={car:carId,pw};S.key=key;store.set("sess",JSON.stringify(S.sess));await loadBundle();S.busy=false;render()}
-  catch(e){S.busy=false;S.err=(e&&e.name==="OperationError")?"Fel lösenord för "+car.name+".":"Kunde inte nå appen. Kontrollera nätet.";render()}
+    S.sess={u,pw};S.key=key;store.set("sess",JSON.stringify(S.sess));await loadBundle();S.busy=false;render()}
+  catch(e){S.busy=false;S.err=(e&&e.name==="OperationError")?"Fel användarnamn eller lösenord.":"Kunde inte nå appen. Kontrollera nätet.";render()}
 }
 
 function render(){
   const M=$("#main");
   $("#switch").hidden=!S.sess;$("#switch").textContent="Logga ut";
   $("#status").textContent=S.cars?((S.offline?"Utan nät – visar senast hämtade. ":"")+"Senast publicerad "+new Date(S.cars.updated).toLocaleString("sv-SE",{dateStyle:"short",timeStyle:"short"})+"."):"";
-  if(!S.cars){$("#sub").textContent="";M.innerHTML=S.busy?'<div class="card muted">Hämtar…</div>':'<div class="card">Kunde inte nå appen. Kontrollera nätet och tryck Uppdatera.</div>';return}
+  if(!S.cars){$("#topbar").hidden=false;$("#sub").textContent="";M.innerHTML=S.busy?'<div class="card muted">Hämtar…</div>':'<div class="card">Kunde inte nå appen. Kontrollera nätet och tryck Uppdatera.</div>';return}
+  document.documentElement.classList.toggle("out",!S.sess);
   if(!S.sess){
-    $("#sub").textContent="Logga in";
-    const pick=S.pick&&carOf(S.pick);
-    M.innerHTML='<div class="card" style="display:flex;flex-direction:column;gap:14px"><h2>Logga in</h2>'+
-      '<div><div class="muted" style="font-size:14px;margin-bottom:6px">Välj bil</div><div class="acts">'+S.cars.cars.map(c=>'<button class="btn'+(S.pick===c.id?' primary':'')+'" data-pick="'+esc(c.id)+'">'+esc(c.name)+'</button>').join("")+'</div></div>'+
-      (pick?'<form id="loginForm" style="display:flex;flex-direction:column;gap:10px"><label style="display:flex;flex-direction:column;gap:6px"><span class="muted" style="font-size:14px">Lösenord för '+esc(pick.name)+'</span><input id="pw" type="password" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" style="font:inherit;font-size:18px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--fg)"></label><button class="btn primary" type="submit"'+(S.busy?' disabled':'')+'>'+(S.busy?'Loggar in…':'Logga in')+'</button></form>':'')+
-      (S.err?'<div class="notice warn">'+esc(S.err)+'</div>':'')+
-      '<p class="muted" style="margin:0;font-size:14px">Du är inloggad tills du loggar ut. Lösenordet får du av transportledaren.</p></div>';
-    const pw=$("#pw");if(pw)pw.focus();
+    $("#topbar").hidden=true;$("#status").hidden=true;
+    if(!M.querySelector("#loginForm")){
+      M.innerHTML='<div class="login"><img class="logo" src="logo.svg" alt="Smålands Gastransport AB"><form id="loginForm" autocomplete="on"><h2>Logga in</h2>'+
+        '<label>Användarnamn<input id="user" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"></label>'+
+        '<label>Lösenord<input id="pw" name="password" type="password" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false"></label>'+
+        '<button class="btn primary" type="submit" id="loginBtn">Logga in</button><div id="loginErr"></div></form></div>'}
+    $("#loginBtn").disabled=S.busy;$("#loginBtn").textContent=S.busy?"Loggar in…":"Logga in";
+    $("#loginErr").innerHTML=S.err?'<div class="notice warn">'+esc(S.err)+'</div>':'';
     return}
-  const car=carOf(S.sess.car);
-  $("#sub").textContent=car?car.name:"";
+  $("#topbar").hidden=false;$("#status").hidden=false;
+  const car=(S.bundle&&S.bundle.car)||{name:""};
+  $("#sub").textContent=car.name||"";
   if(!S.bundle){M.innerHTML='<div class="card muted">'+(S.err?esc(S.err):'Hämtar rutten…')+'</div>';return}
   const ds=days();let h='';
   if(ds.length)h+='<div class="chips">'+ds.map(d=>'<button class="chip" data-date="'+d+'"'+(d===S.date?' aria-current="date"':'')+'>'+esc(dayLabel(d))+' <span>'+S.bundle.days[d].legs.length+' st</span></button>').join("")+'</div>';
@@ -191,13 +204,12 @@ function render(){
 }
 document.addEventListener("click",async e=>{
   const t=e.target.closest("button");if(!t||t.getAttribute("type")==="submit")return;
-  if(t.dataset.pick){S.pick=t.dataset.pick;S.err="";render();return}
   if(t.id==="switch"){logout("");return}
   if(t.id==="refresh"){t.disabled=true;await refresh();t.disabled=false;toast(S.offline?"Ingen kontakt – visar senast hämtade.":"Uppdaterad.");return}
   if(t.dataset.date){S.date=t.dataset.date;render();window.scrollTo(0,0);return}
   if(t.dataset.save){t.disabled=true;await savePdf(t.dataset.save,t.dataset.name);t.disabled=false;return}
 });
-document.addEventListener("submit",e=>{if(e.target.id==="loginForm"){e.preventDefault();const pw=$("#pw").value.trim();if(pw&&S.pick)login(S.pick,pw)}});
+document.addEventListener("submit",e=>{if(e.target.id==="loginForm"){e.preventDefault();const u=$("#user").value.trim(),pw=$("#pw").value.trim();if(!u||!pw){S.err="Fyll i användarnamn och lösenord.";render();return}login(u,pw)}});
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&S.sess)refresh()});
 setInterval(()=>{if(document.visibilityState==="visible"&&S.sess)refresh()},5*60*1000);
 if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
