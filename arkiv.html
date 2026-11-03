@@ -227,7 +227,8 @@ const S={cars:null,sess:null,key:null,bundle:null,date:null,offline:false,busy:f
 try{S.sess=JSON.parse(store.get("sess")||"null")}catch(e){}
 function iso(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
 const today=()=>iso(new Date());
-function dayLabel(s){const d=new Date(s+"T12:00:00");return DAYS[d.getDay()].replace(/^./,c=>c.toUpperCase())+" "+d.getDate()+" "+MON[d.getMonth()]}
+const TEST_DATES=["2026-11-04"],isTest=d=>TEST_DATES.indexOf(d)>=0;
+function dayLabel(s){const d=new Date(s+"T12:00:00");return DAYS[d.getDay()].replace(/^./,c=>c.toUpperCase())+" "+d.getDate()+" "+MON[d.getMonth()]+(isTest(s)?" (TEST)":"")}
 function hhmm(s){if(!s)return "";const d=new Date(s);return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")}
 function toast(m){const h=$("#toastHost");h.innerHTML='<div class="toast" role="status">'+esc(m)+'</div>';clearTimeout(toast.t);toast.t=setTimeout(()=>h.innerHTML="",3500)}
 const hex=h=>new Uint8Array(h.match(/../g).map(x=>parseInt(x,16)));
@@ -768,7 +769,7 @@ const dkIdx=()=>{try{return JSON.parse(store.get("dkarch:"+S.bundle.dir)||"{}")}
 async function dkHist(){
   if(S.dk.hbusy||!S.bundle||S.bundle.role!=="driver"||!S.bundle.planKey)return;S.dk.hbusy=true;
   try{const dir=S.bundle.dir,ps=await fetchPlans(dir,"2020-01-01"),t=today(),idx=dkIdx();
-    for(const d of Object.keys(ps).sort()){if(d>t)continue;const p=ps[d];if(!p.legs||!p.legs.length)continue;
+    for(const d of Object.keys(ps).sort()){if(d>t||isTest(d))continue;const p=ps[d];if(!p.legs||!p.legs.length)continue;
       await histFetch(dir,[d]);const r=planToRoute(p),st=statesFor(dir,d);
       for(const l of allLegs(dir,d,r.legs)){if(l.deleted||!st.get(l.order+"|lossad"))continue;
         const key=dir+"|"+d+"|"+l.order,sg=dkSig(l,r);
@@ -803,6 +804,7 @@ async function arLoad(){
 function renderArk(){
   const A=S.ar,cars=S.bundle.planCars||[],rows=(A.rows||[]).slice().reverse(),vis=A.car==="all"?rows:rows.filter(x=>x.dir===(cars.find(c=>c.id===A.car)||{}).dir);
   let h='<div class="pagehead"><h2>Arkiv</h2><p class="muted">Alla körda deklarationer för alla bilar. Samma deklarationer ligger sparade i varje förares app.</p></div>';
+  h+='<div class="notice warn">Testdagar ('+TEST_DATES.join(", ")+') sparas inte i arkivet och räknas inte med i Sammanställningen eller exporten.</div>';
   h+='<div class="tiles">'+cars.map(c=>{const r=rows.filter(x=>x.dir===c.dir),kg=r.reduce((a,x)=>a+(x.leg.kg||0),0),dd=new Set(r.map(x=>x.date)).size;return '<div class="tile"><span class="k">'+esc(c.name)+(c.driver?' · '+esc(c.driver.split(" ")[0]):'')+'</span><span class="v">'+r.length+' <small>transporter</small></span><span class="muted" style="font-size:13px">'+dd+' dagar'+(kg?' · '+sp(kg)+' kg':'')+'</span></div>'}).join("")+'</div>';
   h+='<div class="card" style="margin-top:14px"><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;align-items:center"><div class="chips"><button class="chip" data-ar="car" data-c="all"'+(A.car==="all"?' aria-current="date"':'')+'>Alla bilar</button>'+cars.map(c=>'<button class="chip" data-ar="car" data-c="'+c.id+'"'+(A.car===c.id?' aria-current="date"':'')+'>'+esc(c.name)+'</button>').join("")+'</div><button class="btn small" data-ar="csv">Exportera data (CSV)</button></div>'+
     (A.busy?'<p class="muted">Hämtar…</p>':'')+
@@ -1264,7 +1266,7 @@ function tbl(head,rows,foot){return '<div style="overflow-x:auto"><table style="
 const CARS=[["bil1","Bil 1"],["bil2","Bil 2"],["bil3","Bil 3"]];
 S.sumTab="tot";S.from="";S.to="";
 const carKey=n=>"bil"+String(n||"").replace(/\D/g,"");
-const inR=d=>(!S.from||d>=S.from)&&(!S.to||d<=S.to);
+const inR=d=>!isTest(d)&&(!S.from||d>=S.from)&&(!S.to||d<=S.to);
 function sumTop(){
   const q=(l,a,b)=>'<button class="chip" data-range="'+a+'|'+b+'"'+(S.from===a&&S.to===b?' aria-current="date"':'')+'>'+l+'</button>';
   const tab=(k,l)=>'<button class="chip" data-sumtab="'+k+'"'+(S.sumTab===k?' aria-current="date"':'')+'>'+l+'</button>';
@@ -1571,7 +1573,7 @@ async function akInit(){if(S.ak.init)return;S.ak.init=true;if(!window.showDirect
   if(S.ak.dir){await akPerm(false);if(S.ak.perm==="granted")await akScanDisk()}}
 function akItems(){const out=[],t=today();
   (S.bundle.planCars||[]).forEach(pc=>{if(!pc.dir)return;
-    Object.keys(S.plans).forEach(k=>{if(k.indexOf(pc.dir+"|")!==0)return;const d=k.slice(pc.dir.length+1);if(d>t)return;
+    Object.keys(S.plans).forEach(k=>{if(k.indexOf(pc.dir+"|")!==0)return;const d=k.slice(pc.dir.length+1);if(d>t||isTest(d))return;
       const p=S.plans[k];if(!p||!p.legs||!p.legs.length)return;const r=planToRoute(p),st=statesFor(pc.dir,d);
       allLegs(pc.dir,d,r.legs).forEach(l=>{if(l.deleted||!st.get(l.order+"|lossad"))return;
         out.push({dir:pc.dir,date:d,car:akClean((pc.name||"Bil")+" "+(p.driver||pc.driver||"")),leg:l,r,name:akClean(l.order)+".pdf"})})})});
