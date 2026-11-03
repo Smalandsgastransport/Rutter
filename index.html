@@ -135,6 +135,12 @@ html.wide #main{display:flex;flex-direction:column;gap:18px}
 .fld{font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
 .chip{border-radius:5px;font-weight:700}
 .side{border-radius:6px}.side button{border-radius:4px}
+.plcols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start}
+.plcol{display:flex;flex-direction:column;gap:12px;min-width:0}
+html.wide .plcol .legs{display:flex;flex-direction:column;gap:10px;grid-template-columns:none}
+.plcol .leg{padding:14px;min-width:0;max-width:100%;box-sizing:border-box}.plcol .legtop{flex-wrap:wrap;gap:8px}.plcol .pills{flex-wrap:wrap;justify-content:flex-start}.plcol .card,.plcol .legs{min-width:0;max-width:100%}.plcol .acts{flex-wrap:wrap}
+.plcol .carcard{cursor:default;border-top:4px solid var(--accent);border-left:1px solid var(--line)}
+@media (max-width:1250px){.plcols{grid-template-columns:1fr}}
 @media (max-width:900px){.shell{grid-template-columns:1fr}.side{position:static;flex-direction:row;overflow-x:auto}.side button{white-space:nowrap}}
 html.out,html.out body{background:var(--surface)}
 .btn.big{min-height:58px;font-size:18px;width:100%}
@@ -523,18 +529,16 @@ function plOpts(sel){const ps=S.bundle.places||[];const g=(k,l)=>'<optgroup labe
 function readPl(){const g=id=>document.getElementById(id);
   if(g("pDate")&&g("pDate").value&&g("pDate").value!==S.pl.date)return;
   const F=S.pl.form;if(F){if(g("plFrom"))F.from=g("plFrom").value;if(g("plTo"))F.to=g("plTo").value;if(g("plAntal"))F.antal=+g("plAntal").value||1;if(g("plNote"))F.note=g("plNote").value}}
-function renderPlan(){
-  const B=S.bundle;if(!B.planKey)return '<div class="card muted">Planeringen är inte aktiverad.</div>';
-  if(!S.pl.date)S.pl.date=iso(new Date(Date.now()+864e5));
-  const car=planCar(),D=plDraft(),st=statesFor(car.dir,S.pl.date),F=S.pl.form;
+function planCol(c,keep){
+  const B=S.bundle;
+  const car=planCar(),D=plDraft(),st=statesFor(car.dir,S.pl.date),F=c.id===keep?S.pl.form:null;
   const sel='style="font:inherit;font-size:17px;padding:10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg);width:100%"';
-  const tabs=(B.planCars||[]).map(c=>{const sel1=S.pl.car===c.id,I=sel1?{driver:D.driver,reg:D.reg,trailer:D.trailer,n:D.legs.length,sent:!!D.sent}:plInfo(c);
+  const tabs=[car].map(c=>{const sel1=true,I=sel1?{driver:D.driver,reg:D.reg,trailer:D.trailer,n:D.legs.length,sent:!!D.sent}:plInfo(c);
     return '<div class="carcard'+(sel1?' on':'')+'" '+(sel1?'':'data-pcar="'+c.id+'" role="button" tabindex="0"')+'><div class="ch"><b>'+esc(c.name)+'</b><span class="tag">'+(I.n?I.n+' transp.'+(I.sent?' · utskickad':' · ej utskickad'):'Ingen rutt')+'</span></div>'+
     (sel1?'<div class="cf"><label class="fld">Förare<input data-pf="driver" value="'+esc(D.driver)+'" '+sel+'></label><label class="fld">Bil reg.nr<input data-pf="reg" value="'+esc(D.reg)+'" '+sel+'></label><label class="fld">Släp reg.nr<input data-pf="trailer" value="'+esc(D.trailer)+'" '+sel+'></label></div>':
     '<div class="cs"><span>'+esc(I.driver||"Ingen förare")+'</span><span class="reg">'+esc(I.reg||"–")+'</span>'+(I.trailer?'<span class="reg">'+esc(I.trailer)+'</span>':'')+'</div>')+'</div>'}).join("");
-  let h='<h2>Planering</h2><div class="card" style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><label class="muted" style="font-size:14px">Dag <input type="date" id="pDate" value="'+esc(S.pl.date)+'" '+sel.replace("width:100%","width:auto")+'></label><button class="chip" data-pdate="0">Idag</button><button class="chip" data-pdate="1">Imorgon</button></div></div><div class="carcards">'+tabs+'</div>';
-  h+=notisCard(S.pl.date);
-  h+='<div class="card" style="display:flex;flex-direction:column;gap:10px"><b>'+esc(car.name||"")+' · '+esc(dayLabel(S.pl.date))+'</b>';
+  let h='<div class="plcol" data-col="'+c.id+'">'+tabs;
+  h+='<div class="card" style="display:flex;flex-direction:column;gap:10px"><b>'+esc(dayLabel(S.pl.date))+'</b>';
   h+=D.legs.length?'<div class="legs">'+D.legs.map((l,i)=>{const L=st.get(l.order+"|lastad"),U=st.get(l.order+"|lossad");
     return '<div class="leg"><div class="legtop"><span class="n">'+String(i+1).padStart(2,"0")+'</span><span class="pills">'+(l.antal>1?'<span class="pill p-antal">Antal '+l.antal+'</span>':'')+'<span class="pill p-type">'+esc(l.uppdrag)+'</span><span class="pill p-'+esc(l.load)+'">'+esc(LOADS[l.load]||l.load)+' · '+esc(l.mangd)+'</span>'+(L?'<span class="pill p-full">Lastad '+esc(hhmm(L.ts))+'</span>':'')+(U?'<span class="pill p-full">Lossad '+esc(hhmm(U.ts))+'</span>':'')+'</span></div><div class="note"><b>'+esc(l.from.name)+'</b> → <b>'+esc(l.to.name)+'</b></div>'+(l.note?'<div class="note">'+esc(l.note)+'</div>':'')+
       '<div class="acts"><button class="btn small" data-plup="'+i+'"'+(i?'':' disabled')+'>↑</button><button class="btn small" data-pldown="'+i+'"'+(i<D.legs.length-1?'':' disabled')+'>↓</button><button class="btn small" data-pledit="'+i+'">Ändra</button><button class="btn link" data-pldel="'+i+'">Radera</button></div></div>'}).join("")+'</div>':'<p class="muted" style="margin:0">Inga transporter än för den här dagen.</p>';
@@ -546,6 +550,16 @@ function renderPlan(){
     '<div class="acts"><button class="btn go" data-plsave="1">'+(F.idx!=null?'Spara ändring':'Lägg till')+'</button><button class="btn" data-plcancel="1">Avbryt</button></div></div>':'<button class="btn" data-plnew="1">+ Ny transport</button>';
   h+='<div class="acts" style="align-items:center;flex-wrap:wrap"><button class="btn primary big" data-plsend="1"'+(D.legs.length?'':' disabled')+'>'+(D.sent?'Skicka ut ändringar':'Skicka ut till '+esc((D.driver||"föraren").split(" ")[0]))+'</button>'+(D.sent?'<button class="btn link" data-plretract="1">Ta tillbaka rutten</button>':'')+'</div>'+
     '<p class="muted" style="margin:0;font-size:14px">'+(D.sent?'Senast skickad '+esc(hhmm(D.sent))+(D.dirty?' · <b>osparade ändringar</b> (skicka ut igen)':' · allt är utskickat.'):'Ej utskickad än. Bilen ser rutten och kan spara deklarationerna när du skickat ut den.')+'</p></div>';
+  return h+'</div>'}
+function renderPlan(){
+  const B=S.bundle;if(!B.planKey)return '<div class="card muted">Planeringen är inte aktiverad.</div>';
+  if(!S.pl.date)S.pl.date=iso(new Date(Date.now()+864e5));
+  const sel='style="font:inherit;font-size:17px;padding:10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg);width:auto"';
+  if(!S.pl.car||!(B.planCars||[]).some(c=>c.id===S.pl.car))S.pl.car=((B.planCars||[])[0]||{}).id;
+  let h='<h2>Planering</h2>'+'<div class="card" style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><label class="muted" style="font-size:14px">Dag <input type="date" id="pDate" value="'+esc(S.pl.date)+'" '+sel+'></label><button class="chip" data-pdate="0">Idag</button><button class="chip" data-pdate="1">Imorgon</button></div></div>';
+  h+=notisCard(S.pl.date);
+  const keep=S.pl.car;
+  h+='<div class="plcols">'+(B.planCars||[]).map(c=>{S.pl.car=c.id;try{return planCol(c,keep)}finally{S.pl.car=keep}}).join("")+'</div>';
   return h}
 async function plSend(retract){
   const D=plDraft(),car=planCar();readPl();
@@ -749,6 +763,8 @@ function render(){
   h+='<div style="margin-top:12px">'+notisForm()+'</div>';
   M.innerHTML=h;
 }
+document.addEventListener("pointerdown",e=>{if(!S.bundle||S.bundle.role!=="admin")return;const c=e.target.closest&&e.target.closest("[data-col]");if(c&&c.dataset.col!==S.pl.car){readPl();S.pl.car=c.dataset.col;S.pl.form=null}},true);
+document.addEventListener("focusin",e=>{if(!S.bundle||S.bundle.role!=="admin")return;const c=e.target.closest&&e.target.closest("[data-col]");if(c&&c.dataset.col!==S.pl.car){S.pl.car=c.dataset.col;S.pl.form=null}},true);
 document.addEventListener("click",async e=>{
   const t=e.target.closest("button,[data-pcar]");if(!t||t.getAttribute("type")==="submit")return;
   if(t.id==="switch"){logout("");return}
