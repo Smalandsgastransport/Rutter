@@ -1,15 +1,17 @@
-// Gör appen användbar utan nät: själva appen sparas, data hämtas från nätet i första hand.
-const SHELL="shell-v3";
+// Gör appen användbar utan nät. Allt hämtas från nätet i första hand, så att nya versioner syns direkt;
+// den sparade kopian används bara när nätet saknas.
+const SHELL="shell-v4";
 const FILES=["./","index.html","manifest.webmanifest","icon-180.png","icon-192.png","icon-512.png","logo.svg"];
-self.addEventListener("install",e=>{e.waitUntil(caches.open(SHELL).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting()))});
+self.addEventListener("install",e=>{e.waitUntil(caches.open(SHELL).then(c=>c.addAll(FILES.map(f=>new Request(f,{cache:"reload"})))).then(()=>self.skipWaiting()))});
 self.addEventListener("activate",e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==SHELL&&k!=="pdf-v2").map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
 self.addEventListener("fetch",e=>{
   const u=new URL(e.request.url);
   if(e.request.method!=="GET"||u.origin!==location.origin)return;
-  if(u.pathname.includes("/data/")){
-    // Rutter och PDF:er: nätet först, sparad kopia om nätet saknas.
-    e.respondWith(fetch(e.request).then(r=>{if(r.ok&&u.pathname.endsWith(".bin")&&!u.pathname.endsWith("rutt.bin")){const cp=r.clone();caches.open("pdf-v2").then(c=>c.put(u.pathname,cp))}return r}).catch(()=>caches.match(u.pathname).then(m=>m||caches.match(e.request))));
-    return;
-  }
-  e.respondWith(caches.match(e.request).then(m=>m||fetch(e.request)));
+  const isPdf=u.pathname.includes("/data/")&&u.pathname.endsWith(".bin")&&!u.pathname.endsWith("rutt.bin");
+  e.respondWith(fetch(e.request,{cache:"no-store"}).then(r=>{
+    if(r.ok){const cp=r.clone();
+      if(isPdf)caches.open("pdf-v2").then(c=>c.put(u.pathname,cp));
+      else if(!u.pathname.includes("/data/"))caches.open(SHELL).then(c=>c.put(e.request.mode==="navigate"?"index.html":e.request,cp));}
+    return r;
+  }).catch(()=>caches.match(isPdf?u.pathname:e.request).then(m=>m||(e.request.mode==="navigate"?caches.match("index.html"):caches.match(u.pathname)))));
 });
