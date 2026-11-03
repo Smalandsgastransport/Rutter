@@ -255,7 +255,7 @@ async function loadBundle(){
   catch(e){const c=store.get("rutt:"+car.dir);if(!c)throw e;buf=unb64(c).buffer;S.offline=true}
   const json=JSON.parse(new TextDecoder().decode(await open(S.key,buf)));
   const prev=S.bundle;S.bundle=json;pickDate();
-  const r=route();if(r&&!isOv()){const k="seen:"+car.dir+":"+r.date;const seen=store.get(k);S.changed=!!(seen&&seen!==r.updated);store.set(k,r.updated);prefetch(car,r)}
+  const r=route();if(r&&!isOv()){prefetch(car,r)}
 }
 async function afterLoad(){
   if(!S.bundle)return;
@@ -572,8 +572,8 @@ async function loadPlansDriver(){
   for(const d of Object.keys(ps)){const p=ps[d];
     if(!p.legs||!p.legs.length){delete S.bundle.days[d];continue}
     S.bundle.days[d]=planToRoute(p);
-    const k="seen:"+S.bundle.dir+":"+d,seen=store.get(k);if(S.date===d&&seen&&seen!==p.updated)S.changed=true;store.set(k,p.updated)}
-  pickDate();
+  }
+  pickDate();S.pl0=true;
 }
 async function loadPlansAdmin(){
   if(!S.bundle||S.bundle.role!=="admin"||!S.bundle.planKey)return;
@@ -1327,7 +1327,7 @@ function render(){
   if(ds.length)h+='<div class="chips">'+ds.map(d=>'<button class="chip" data-date="'+d+'"'+(d===S.date?' aria-current="date"':'')+'>'+esc(dayLabel(d))+' <span>'+S.bundle.days[d].legs.length+' st</span></button>').join("")+'</div>';
   const r=route();
   if(!r){M.innerHTML=h+'<div class="card" style="font-size:17px">Ingen rutt är utskickad till '+esc(car.name)+' just nu.</div><div style="margin-top:12px">'+newFormHtml(null)+'</div><div style="margin-top:12px">'+pausCard()+myNotis()+'</div>'+swapBanner()+hamtCard()+felCard()+arkCard()+ledCard();return}
-  if(S.changed)h+='<div class="notice warn">Rutten har ändrats sedan du senast tittade.</div>';
+  if(S.pl0){const k="seen:"+S.bundle.dir+":"+r.date,sn=store.get(k);if(!sn)store.set(k,String(r.updated));else if(sn!==String(r.updated))h+='<div class="notice warn" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>Rutten har ändrats sedan du senast tittade.</span><button class="btn small" data-al="chg" data-k="'+esc(k)+'" data-u="'+esc(String(r.updated))+'">Okej</button></div>'}
   h+=driverNotesHtml(r);h+='<div>'+pausCard()+myNotis()+'</div>'+swapBanner();
   const st=statesFor(S.bundle.dir,r.date),g=st.get("dag|godkand"),pc=pendingCount();
   h+='<div class="card" style="display:flex;flex-direction:column;gap:10px">'+(g?'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between"><span class="done'+(g.pending?' wait':'')+'">✓ Dagens ordrar godkända '+esc(hhmm(g.ts))+'</span><button class="btn link" data-undo="godkand" data-order="dag">Ångra</button></div>':'<button class="btn go big" data-act="godkand" data-order="dag">Godkänn dagens ordrar</button><p class="muted" style="margin:0;font-size:14.5px">Gå igenom transporterna nedan och godkänn innan du börjar köra.</p>')+
@@ -1464,6 +1464,7 @@ function alertsHtml(){
   if("Notification" in window&&Notification.permission==="default")h+='<div class="notice" style="margin-bottom:10px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>Få en avisering när rutten ändras eller kontoret svarar.</span><button class="btn small" data-al="perm">Slå på aviseringar</button></div>';
   return h}
 document.addEventListener("click",async e=>{const t=e.target.closest("[data-al]");if(!t)return;
+  if(t.dataset.al==="chg"){store.set(t.dataset.k,t.dataset.u);render();return}
   if(t.dataset.al==="ok"){const s=alSeen();topAlerts().forEach(a=>s.add(a.key));store.set(seenKey(),JSON.stringify([...s].slice(-300)));render();return}
   if(t.dataset.al==="perm"){try{await Notification.requestPermission()}catch(x){}render()}});
 function notifyDriver(title,body,tag){
