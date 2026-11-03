@@ -84,6 +84,20 @@ button,a.btn{font:inherit;color:inherit}
 .login input:focus{outline:2px solid var(--accent);outline-offset:1px}
 .minilogo{height:34px;width:auto}
 html.out,html.out body{background:var(--surface)}
+.btn.big{min-height:58px;font-size:18px;width:100%}
+.btn.go{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn.link{border:0;background:none;min-height:38px;padding:4px 8px;color:var(--muted);text-decoration:underline;font-weight:500;font-size:14px}
+.done{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:15px;padding:6px 12px;border-radius:999px;background:var(--full-bg);color:var(--full)}
+.done.wait{background:var(--warn-bg);color:var(--warn)}
+.leg.klar{border-color:var(--full)}
+.ov-car{display:flex;flex-direction:column;gap:10px}
+.ov-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px 12px;align-items:center;padding:8px 0;border-top:1px solid var(--line);font-size:15px}
+.ov-row .r{min-width:0;overflow-wrap:anywhere}
+.ov-st{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.tag{font-size:13px;font-weight:700;padding:2px 9px;border-radius:999px;white-space:nowrap;background:var(--sunk);color:var(--muted)}
+.tag.on{background:var(--full-bg);color:var(--full)}
+.bar{height:8px;border-radius:99px;background:var(--sunk);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:12px 18px;border-radius:10px;font-size:15px;z-index:30;max-width:calc(100% - 32px)}
 [hidden]{display:none!important}
 </style>
@@ -138,16 +152,21 @@ async function loadBundle(){
   catch(e){const c=store.get("rutt:"+car.dir);if(!c)throw e;buf=unb64(c).buffer;S.offline=true}
   const json=JSON.parse(new TextDecoder().decode(await open(S.key,buf)));
   const prev=S.bundle;S.bundle=json;pickDate();
-  const r=route();if(r){const k="seen:"+car.dir+":"+r.date;const seen=store.get(k);S.changed=!!(seen&&seen!==r.updated);store.set(k,r.updated);prefetch(car,r)}
+  const r=route();if(r&&S.bundle.role!=="admin"){const k="seen:"+car.dir+":"+r.date;const seen=store.get(k);S.changed=!!(seen&&seen!==r.updated);store.set(k,r.updated);prefetch(car,r)}
+}
+async function afterLoad(){
+  if(!S.bundle)return;
+  if(S.bundle.role==="admin"){await Promise.all(S.bundle.cars.map(async c=>{if(S.date){await ghList(c.dir,S.date);await fetchNy(c.dir,S.date)}}));return}
+  await sync();if(S.date){await ghList(S.bundle.dir,S.date);await fetchNy(S.bundle.dir,S.date)}
 }
 async function refresh(){
   S.busy=true;render();await loadCars();
-  if(S.sess){try{await loadBundle();S.err=""}catch(e){if(e&&e.name==="OperationError"){logout("Lösenordet stämmer inte längre. Logga in igen.")}else S.err="Kunde inte hämta rutten."}}
+  if(S.sess){try{await loadBundle();S.err="";await afterLoad()}catch(e){if(e&&e.name==="OperationError"){logout("Lösenordet stämmer inte längre. Logga in igen.")}else S.err="Kunde inte hämta rutten."}}
   S.busy=false;render();
 }
-function days(){if(!S.bundle)return [];const min=iso(new Date(Date.now()-864e5));return Object.keys(S.bundle.days).filter(d=>d>=min).sort()}
+function days(){if(!S.bundle)return [];const min=iso(new Date(Date.now()-864e5));const all=S.bundle.role==="admin"?[...new Set([].concat(...S.bundle.cars.map(c=>Object.keys(c.days))))]:Object.keys(S.bundle.days);return all.filter(d=>d>=min).sort()}
 function pickDate(){const ds=days();if(S.date&&ds.includes(S.date))return;S.date=ds.find(d=>d>=today())||ds[ds.length-1]||null}
-function route(){return S.bundle&&S.date?S.bundle.days[S.date]:null}
+function route(){return S.bundle&&S.bundle.role!=="admin"&&S.date?S.bundle.days[S.date]:null}
 function prefetch(car,r){if(!("caches" in window))return;caches.open("pdf-v2").then(c=>[r.allPdf].concat(r.legs.map(l=>l.pdf)).forEach(f=>{const u="data/"+car.dir+"/"+f;c.match(new URL(u,location.href).pathname).then(m=>{if(!m)fetch(u).then(res=>{if(res.ok)c.put(new URL(u,location.href).pathname,res)}).catch(()=>{})})})).catch(()=>{})}
 async function savePdf(file,name){
   try{
@@ -158,16 +177,196 @@ async function savePdf(file,name){
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);
   }catch(e){toast("Kunde inte spara PDF:en. Kontrollera nätet och försök igen.")}
 }
+/* ---------- Godkänn / Lastad / Lossad ---------- */
+const GH="https://api.github.com/repos/";
+S.server={};
+function qKey(){return "q:"+(S.bundle&&S.bundle.dir)}
+function queue(){try{return JSON.parse(store.get(qKey())||"[]")}catch(e){return []}}
+function saveQueue(q){store.set(qKey(),JSON.stringify(q.slice(-500)))}
+function parseName(n){const m=String(n).match(/^(\d+)_([^_]+)_([a-z-]+)\.json$/);return m?{ts:+m[1],order:m[2],type:m[3],name:n}:null}
+function statesFor(dir,date){
+  const evs=[];(S.server[dir+"|"+date]||[]).forEach(n=>{const p=parseName(n);if(p)evs.push(p)});
+  if(S.bundle&&S.bundle.role==="driver"&&dir===S.bundle.dir)queue().filter(e=>e.date===date).forEach(e=>{if(evs.some(x=>x.name===e.name))return;const p=parseName(e.name);if(p){p.pending=!e.sent;evs.push(p)}});
+  evs.sort((a,b)=>a.ts-b.ts);const m=new Map();
+  evs.forEach(e=>{if(e.type.indexOf("angra-")===0)m.delete(e.order+"|"+e.type.slice(6));else m.set(e.order+"|"+e.type,e)});
+  return m;
+}
+function ghHeaders(st,json){const h={Authorization:"Bearer "+st.token,Accept:"application/vnd.github+json"};if(json)h["Content-Type"]="application/json";return h}
+async function ghList(dir,date){const st=S.bundle&&S.bundle.status;if(!st)return;
+  try{const r=await fetch(GH+st.repo+"/contents/status/"+date+"/"+dir+"?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});
+    if(r.status===404){S.server[dir+"|"+date]=[];return}if(!r.ok)return;const a=await r.json();if(Array.isArray(a))S.server[dir+"|"+date]=a.map(x=>x.name)}catch(e){}}
+async function sync(){
+  const st=S.bundle&&S.bundle.status;if(!st||S.bundle.role!=="driver")return;
+  const q=queue();let changed=false;
+  for(const e of q){if(e.sent)continue;
+    try{const body=JSON.stringify({message:"Status "+e.name,content:btoa(unescape(encodeURIComponent(JSON.stringify(e.data,null,1))))});
+      const r=await fetch(GH+st.repo+"/contents/status/"+e.date+"/"+S.bundle.dir+"/"+e.name,{method:"PUT",headers:ghHeaders(st,true),body});
+      if(r.ok||r.status===422){e.sent=true;changed=true;(S.server[S.bundle.dir+"|"+e.date]=S.server[S.bundle.dir+"|"+e.date]||[]).push(e.name)}else break}catch(x){break}}
+  if(changed)saveQueue(q);
+}
+function pendingCount(){return queue().filter(e=>!e.sent).length}
+async function record(type,order){
+  const r=route();if(!r)return;const now=new Date();
+  const name=now.getTime()+"_"+(order||"dag")+"_"+type+".json";
+  const q=queue();q.push({name,date:r.date,sent:false,data:{typ:type,order:order||null,datum:r.date,tid:now.toISOString(),bil:S.bundle.car.name,forare:r.driver||""}});saveQueue(q);
+  render();await sync();render();
+}
+const NAMES={godkand:"Godkända",lastad:"Lastad",lossad:"Lossad"};
+
+/* ---------- Godsdeklaration som PDF i surfplattan ---------- */
+const PT=72/25.4,PH=841.89;
+const FONTS={helv:["F1","Arial, Helvetica, sans-serif",""],helvB:["F2","Arial, Helvetica, sans-serif","bold "],times:["F3","'Times New Roman', Times, serif",""],timesB:["F4","'Times New Roman', Times, serif","bold "]};
+function declOps(leg,r){
+  const ops=[],P=o=>ops.push(o),from=leg.from||{},to=leg.to||{},company=r.company||"Småländska Bränslen AB";
+  P({t:"text",x:134,y:15,s:"DATUM:",f:"times",z:11});
+  P({t:"text",x:152,y:15,s:r.dDate||r.date,f:"times",z:11});
+  P({t:"line",x1:148,y1:16.2,x2:187.5,y2:16.2,w:.25});
+  P({t:"text",x:105,y:29,s:"GODSDEKLARATION farligt gods",f:"helvB",z:16,a:"center"});
+  const box=(x,w,label,p)=>{P({t:"rect",x,y:38,w,h:38});P({t:"text",x:x+2,y:43,s:label,f:"helvB",z:8.5});
+    P({t:"text",x:x+2,y:52,s:company,f:"timesB",z:10.5});P({t:"text",x:x+2,y:57,s:p.street||"",f:"helv",z:9.5});P({t:"text",x:x+2,y:61.6,s:((p.zip||"")+" "+(p.city||"")).trim(),f:"helv",z:9.5})};
+  box(23,64,"AVSÄNDARE:",from);box(110,77.5,"MOTTAGARE:",to);
+  let ty=77.6;
+  if(leg.load==="tom"){P({t:"text",x:25,y:87.5,s:"Tömd MEG-Container, Senaste last:",f:"helvB",z:10});ty=93.6}
+  const xs=[23,40,79.8,99.7,120,131.3,157.4,187.5],hh=8.4,dh=9.8;
+  P({t:"rect",x:xs[0],y:ty,w:xs[7]-xs[0],h:hh+dh});P({t:"line",x1:xs[0],y1:ty+hh,x2:xs[7],y2:ty+hh});
+  for(let i=1;i<7;i++)P({t:"line",x1:xs[i],y1:ty,x2:xs[i],y2:ty+hh+dh});
+  ["UN-nr","Transportbenämning","Etikett","Tunnel","Antal","Typ av kolli","Nettomängd"].forEach((h,i)=>P({t:"text",x:xs[i]+1.3,y:ty+3.4,s:h,f:"helv",z:8}));
+  P({t:"text",x:xs[3]+1.3,y:ty+6.6,s:"restriktion",f:"helv",z:8});
+  const dy=ty+hh+4.4,a=leg.antal||1;
+  P({t:"text",x:xs[0]+1.3,y:dy,s:"UN 1971",f:"timesB",z:8.5});P({t:"text",x:xs[1]+1.3,y:dy,s:"Metan, komprimerad",f:"timesB",z:8.5});
+  P({t:"text",x:xs[2]+1.3,y:dy+.6,s:"2.1",f:"helvB",z:11});P({t:"text",x:xs[3]+1.3,y:dy+.6,s:"(B/D)",f:"helvB",z:11});
+  P({t:"text",x:xs[4]+1.3,y:dy+.4,s:String(a),f:a>1?"helvB":"helv",z:a>1?12:10.5});
+  P({t:"text",x:xs[5]+1.3,y:dy,s:"MEG-",f:"helvB",z:10.5});P({t:"text",x:xs[5]+1.3,y:dy+4.2,s:"Container",f:"helvB",z:10.5});
+  P({t:"text",x:xs[6]+1.3,y:dy+.4,s:leg.mangd||"",f:"helv",z:10.5});
+  P({t:"img",x:23,y:262,w:47,h:18});
+  const drv=leg.driver||r.driver||"";if(drv)P({t:"text",x:23,y:286,s:"Chaufför: "+drv,f:"helv",z:9.5});
+  P({t:"text",x:187.5,y:286,s:"Order "+leg.order,f:"helv",z:7,a:"right",gray:true});
+  return ops;
+}
+function textW(str,f,z){const c=textW.c||(textW.c=document.createElement("canvas").getContext("2d"));c.font=FONTS[f][2]+"100px "+FONTS[f][1];return c.measureText(str).width/100*z}
+function winAnsi(str){let o="";for(const ch of String(str)){let c=ch.codePointAt(0);if(c>255)c=63;const b=String.fromCharCode(c);o+=(b==="("||b===")"||b==="\\")?"\\"+b:b}return o}
+let LOGOJPG=null;
+async function logoJpeg(){if(LOGOJPG)return LOGOJPG;const img=new Image();img.src="decl-logo.png";await img.decode();
+  const c=document.createElement("canvas");c.width=img.naturalWidth;c.height=img.naturalHeight;const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);g.drawImage(img,0,0);
+  const bin=atob(c.toDataURL("image/jpeg",.92).split(",")[1]);LOGOJPG={w:c.width,h:c.height,bytes:Uint8Array.from(bin,x=>x.charCodeAt(0))};return LOGOJPG}
+async function makePdf(legs,r){
+  const img=await logoJpeg(),enc=s=>Uint8Array.from(s,x=>x.charCodeAt(0)&255);
+  const objs=[];const add=parts=>{objs.push(parts);return objs.length};
+  const cat=add(null),pages=add(null);
+  const fonts=[["F1","Helvetica"],["F2","Helvetica-Bold"],["F3","Times-Roman"],["F4","Times-Bold"]].map(([k,n])=>[k,add([enc("<< /Type /Font /Subtype /Type1 /BaseFont /"+n+" /Encoding /WinAnsiEncoding >>")])]);
+  const im=add([enc("<< /Type /XObject /Subtype /Image /Width "+img.w+" /Height "+img.h+" /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "+img.bytes.length+" >>\nstream\n"),img.bytes,enc("\nendstream")]);
+  const kids=[];
+  for(const leg of legs){
+    let cs="0.13 0.13 0.13 RG\n";
+    for(const o of declOps(leg,r)){
+      if(o.t==="text"){let x=o.x*PT;const y=PH-o.y*PT,col=o.gray?"0.47 0.47 0.47":"0.07 0.07 0.07";
+        const parts=o.a?[o.s.replace(/³/g,"3")]:o.s.split("³");
+        const w=parts.reduce((t,pt,i)=>t+textW(pt,o.f,o.z)+(i<parts.length-1?textW("3",o.f,o.z*.62):0),0);if(o.a==="center")x-=w/2;else if(o.a==="right")x-=w;
+        parts.forEach((pt,i)=>{cs+="BT /"+FONTS[o.f][0]+" "+o.z+" Tf "+col+" rg "+x.toFixed(2)+" "+y.toFixed(2)+" Td ("+winAnsi(pt)+") Tj ET\n";x+=textW(pt,o.f,o.z);
+          if(i<parts.length-1){const z2=o.z*.62;cs+="BT /"+FONTS[o.f][0]+" "+z2.toFixed(2)+" Tf "+col+" rg "+x.toFixed(2)+" "+(y+o.z*.38).toFixed(2)+" Td (3) Tj ET\n";x+=textW("3",o.f,z2)}})}
+      else if(o.t==="rect")cs+=(.3*PT).toFixed(2)+" w "+(o.x*PT).toFixed(2)+" "+(PH-(o.y+o.h)*PT).toFixed(2)+" "+(o.w*PT).toFixed(2)+" "+(o.h*PT).toFixed(2)+" re S\n";
+      else if(o.t==="line")cs+=((o.w||.3)*PT).toFixed(2)+" w "+(o.x1*PT).toFixed(2)+" "+(PH-o.y1*PT).toFixed(2)+" m "+(o.x2*PT).toFixed(2)+" "+(PH-o.y2*PT).toFixed(2)+" l S\n";
+      else if(o.t==="img")cs+="q "+(o.w*PT).toFixed(2)+" 0 0 "+(o.h*PT).toFixed(2)+" "+(o.x*PT).toFixed(2)+" "+(PH-(o.y+o.h)*PT).toFixed(2)+" cm /Im1 Do Q\n";
+    }
+    const content=add([enc("<< /Length "+cs.length+" >>\nstream\n"+cs+"\nendstream")]);
+    kids.push(add([enc("<< /Type /Page /Parent "+pages+" 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << "+fonts.map(([k,n])=>"/"+k+" "+n+" 0 R").join(" ")+" >> /XObject << /Im1 "+im+" 0 R >> >> /Contents "+content+" 0 R >>")]));
+  }
+  objs[cat-1]=[enc("<< /Type /Catalog /Pages "+pages+" 0 R >>")];
+  objs[pages-1]=[enc("<< /Type /Pages /Kids ["+kids.map(k=>k+" 0 R").join(" ")+"] /Count "+kids.length+" >>")];
+  const out=[enc("%PDF-1.4\n%âãÏÓ\n")];let pos=out[0].length;const offs=[];
+  objs.forEach((parts,i)=>{offs.push(pos);const head=enc((i+1)+" 0 obj\n"),tail=enc("\nendobj\n");out.push(head);pos+=head.length;parts.forEach(p=>{out.push(p);pos+=p.length});out.push(tail);pos+=tail.length});
+  let x="xref\n0 "+(objs.length+1)+"\n0000000000 65535 f \n";offs.forEach(o=>x+=String(o).padStart(10,"0")+" 00000 n \n");
+  x+="trailer\n<< /Size "+(objs.length+1)+" /Root "+cat+" 0 R >>\nstartxref\n"+pos+"\n%%EOF\n";out.push(enc(x));
+  return new Blob(out,{type:"application/pdf"});
+}
+async function shareBlob(blob,name){
+  const f=new File([blob],name,{type:"application/pdf"});
+  if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:name});return}catch(e){if(e&&e.name==="AbortError")return}}
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);
+}
+
+/* ---------- Radera och skapa transport ---------- */
+S.nyData={};S.newForm=null;S.confirmDel=null;
+function fullQtyNum(r){const m=String(r.fullQty||"14 m³").match(/[\d.,]+/);return m?parseFloat(m[0].replace(",",".")):14}
+function mangdFor(r,load,antal){if(load==="tom")return "0 m³";return String(Math.round(fullQtyNum(r)*antal*100)/100).replace(".",",")+" m³"}
+function nyEvents(dir,date){
+  const out=[];const seen=new Set();
+  (S.bundle.role==="driver"&&dir===S.bundle.dir?queue():[]).filter(e=>e.date===date&&e.data&&e.data.typ==="ny").forEach(e=>{seen.add(e.name);out.push({name:e.name,ts:parseName(e.name).ts,leg:e.data.leg,pending:!e.sent})});
+  (S.server[dir+"|"+date]||[]).forEach(n=>{const p=parseName(n);if(!p||p.type!=="ny"||seen.has(n))return;const d=S.nyData[n];if(d)out.push({name:n,ts:p.ts,leg:d.leg})});
+  return out.sort((a,b)=>a.ts-b.ts);
+}
+async function fetchNy(dir,date){const st=S.bundle.status;if(!st)return;
+  for(const n of (S.server[dir+"|"+date]||[])){const p=parseName(n);if(!p||p.type!=="ny"||S.nyData[n])continue;
+    try{const r=await fetch(GH+st.repo+"/contents/status/"+date+"/"+dir+"/"+n,{headers:ghHeaders(st),cache:"no-store"});if(!r.ok)continue;const j=await r.json();S.nyData[n]=JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g,"")))))}catch(e){}}}
+function allLegs(dir,date,base){
+  const st=statesFor(dir,date);
+  const news=nyEvents(dir,date).filter(e=>st.has(e.leg.order+"|ny")).map(e=>Object.assign({},e.leg,{isNew:true,pending:e.pending}));
+  return base.concat(news).map((l,i)=>Object.assign({},l,{deleted:st.get(l.order+"|raderad")||null,pos:i+1}));
+}
+function allChanged(){const r=route();return !!(r&&allLegs(S.bundle.dir,r.date,r.legs).some(l=>l.isNew||l.deleted))}
+function placeOpts(sel){const ps=(S.bundle.places||[]);const g=(k,lab)=>'<optgroup label="'+lab+'">'+ps.filter(p=>p.kind===k).map(p=>'<option value="'+esc(p.id)+'"'+(p.id===sel?' selected':'')+'>'+esc(p.name)+'</option>').join("")+'</optgroup>';return '<option value="">Välj plats</option>'+g("fyll","Påfyllning")+g("station","Stationer")}
+function newFormHtml(r){
+  const F=S.newForm;if(!F)return '<button class="btn" data-newopen="1" style="width:100%">+ Ny transport</button>';
+  const sel='style="font:inherit;font-size:17px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--fg);width:100%"';
+  return '<div class="card" style="display:flex;flex-direction:column;gap:12px"><h3 style="font-size:20px">Ny transport</h3>'+
+    '<label class="muted" style="display:flex;flex-direction:column;gap:6px;font-size:14px">Hämta<select id="nfFrom" '+sel+'>'+placeOpts(F.from)+'</select></label>'+
+    '<label class="muted" style="display:flex;flex-direction:column;gap:6px;font-size:14px">Lämna<select id="nfTo" '+sel+'>'+placeOpts(F.to)+'</select></label>'+
+    '<div class="acts" style="align-items:center"><button class="btn'+(F.load==="full"?' go':'')+'" data-nfload="full">Fullt</button><button class="btn'+(F.load==="tom"?' go':'')+'" data-nfload="tom">Tomt</button>'+
+    '<label class="muted" style="display:flex;align-items:center;gap:8px;font-size:14px">Antal flak<select id="nfAntal" '+sel.replace("width:100%","width:auto")+'>'+[1,2,3,4].map(n=>'<option'+(n===F.antal?' selected':'')+'>'+n+'</option>').join("")+'</select></label></div>'+
+    '<label class="muted" style="display:flex;flex-direction:column;gap:6px;font-size:14px">Notering (valfritt)<input id="nfNote" value="'+esc(F.note||"")+'" '+sel+'></label>'+
+    (F.err?'<div class="notice warn">'+esc(F.err)+'</div>':'')+
+    '<div class="acts"><button class="btn go" data-nfsave="1">Skapa transport och deklaration</button><button class="btn" data-nfcancel="1">Avbryt</button></div></div>';
+}
+function readForm(){const F=S.newForm;if(!F)return;const g=id=>document.getElementById(id);if(g("nfFrom"))F.from=g("nfFrom").value;if(g("nfTo"))F.to=g("nfTo").value;if(g("nfAntal"))F.antal=+g("nfAntal").value||1;if(g("nfNote"))F.note=g("nfNote").value}
+async function createLeg(){
+  const F=S.newForm,r=route();if(!F||!r)return;
+  const ps=S.bundle.places||[],from=ps.find(p=>p.id===F.from),to=ps.find(p=>p.id===F.to);
+  if(!from||!to){F.err="Välj både var flaket hämtas och var det lämnas.";render();return}
+  if(from.id===to.id){F.err="Hämta och lämna kan inte vara samma plats.";render();return}
+  const prefix=(r.legs[0]?r.legs[0].order:r.date.slice(2).replace(/-/g,"")+"-B0-00").replace(/-[^-]+$/,"");
+  const k=nyEvents(S.bundle.dir,r.date).length+1;
+  const strip=p=>({name:p.name,street:p.street,zip:p.zip,city:p.city});
+  const leg={order:prefix+"-N"+k,uppdrag:"Ny från chauffören",load:F.load,antal:F.antal,mangd:mangdFor(r,F.load,F.antal),note:(F.note||"").trim(),from:strip(from),to:strip(to),driver:r.driver||""};
+  const now=new Date(),name=now.getTime()+"_"+leg.order+"_ny.json";
+  const q=queue();q.push({name,date:r.date,sent:false,data:{typ:"ny",order:leg.order,datum:r.date,tid:now.toISOString(),bil:S.bundle.car.name,forare:r.driver||"",leg}});saveQueue(q);
+  S.newForm=null;render();toast("Transporten är skapad. Spara deklarationen på transporten.");await sync();render();
+}
+
 function logout(msg){S.sess=null;S.key=null;S.bundle=null;S.date=null;store.set("sess",null);S.err=msg||"";render()}
 async function login(user,pw){
   S.busy=true;S.err="";render();
   const u=await userHash(user),car=carOf(u);
   if(!car){S.busy=false;S.err="Fel användarnamn eller lösenord.";render();return}
   try{const key=await deriveKey(pw,car);const buf=await fetchBin("data/"+car.dir+"/rutt.bin");await open(key,buf);
-    S.sess={u,pw};S.key=key;store.set("sess",JSON.stringify(S.sess));await loadBundle();S.busy=false;render()}
+    S.sess={u,pw};S.key=key;store.set("sess",JSON.stringify(S.sess));await loadBundle();S.busy=false;render();await afterLoad();render()}
   catch(e){S.busy=false;S.err=(e&&e.name==="OperationError")?"Fel användarnamn eller lösenord.":"Kunde inte nå appen. Kontrollera nätet.";render()}
 }
 
+function legActs(st,l,approved){
+  const L=st.get(l.order+"|lastad"),U=st.get(l.order+"|lossad");
+  const pill=(e,t)=>'<span class="done'+(e.pending?' wait':'')+'">✓ '+t+' '+esc(hhmm(e.ts))+'</span>';
+  let h='<div class="acts" style="align-items:center">';
+  if(!L)h+='<button class="btn go" data-act="lastad" data-order="'+esc(l.order)+'"'+(approved?'':' disabled')+'>Lastad</button>'+(approved?'':'<span class="muted" style="font-size:14px">Godkänn dagens ordrar först</span>');
+  else{h+=pill(L,"Lastad");
+    if(!U)h+='<button class="btn go" data-act="lossad" data-order="'+esc(l.order)+'">Lossad</button><button class="btn link" data-undo="lastad" data-order="'+esc(l.order)+'">Ångra</button>';
+    else h+=pill(U,"Lossad")+'<button class="btn link" data-undo="lossad" data-order="'+esc(l.order)+'">Ångra</button>'}
+  return h+'</div>';
+}
+function renderAdmin(){
+  const ds=days(),B=S.bundle;let h='';
+  if(!B.status)h+='<div class="notice warn">Rapporteringen är inte inkopplad än. Godkänn, Lastad och Lossad syns här när den är klar.</div>';
+  if(ds.length)h+='<div class="chips">'+ds.map(d=>'<button class="chip" data-date="'+d+'"'+(d===S.date?' aria-current="date"':'')+'>'+esc(dayLabel(d))+'</button>').join("")+'</div>';
+  const cars=B.cars.filter(c=>S.date&&c.days[S.date]);
+  if(!cars.length)return h+'<div class="card">Inga utskickade rutter för den här dagen.</div>';
+  h+='<h2>'+esc(dayLabel(S.date))+'</h2>';
+  cars.forEach(c=>{const d=c.days[S.date],st=statesFor(c.dir,S.date),g=st.get("dag|godkand");
+    const legs=allLegs(c.dir,S.date,d.legs.map(l=>Object.assign({},l,{from:{name:l.from},to:{name:l.to}}))),act=legs.filter(l=>!l.deleted);
+    const nU=act.filter(l=>st.get(l.order+"|lossad")).length,pct=act.length?Math.round(100*nU/act.length):0;
+    h+='<div class="card ov-car"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline"><h3 style="font-size:20px">'+esc(c.name)+(d.driver?' · '+esc(d.driver.split(" ")[0]):'')+'</h3>'+(g?'<span class="done">✓ Godkänd '+esc(hhmm(g.ts))+'</span>':'<span class="done wait">Inte godkänd</span>')+'</div>'+
+      '<div class="muted" style="font-size:14px">'+nU+' av '+act.length+' lossade</div><div class="bar"><i style="width:'+pct+'%"></i></div>'+
+      legs.map(l=>{const L=st.get(l.order+"|lastad"),U=st.get(l.order+"|lossad");return '<div class="ov-row"'+(l.deleted?' style="opacity:.55"':'')+'><span class="n" style="font-size:17px">'+String(l.pos).padStart(2,"0")+'</span><span class="r"'+(l.deleted?' style="text-decoration:line-through"':'')+'>'+(l.isNew?'<span class="pill p-del">Ny</span> ':'')+esc(l.from.name)+' → '+esc(l.to.name)+' <span class="muted">('+esc((LOADS[l.load]||l.load).toLowerCase())+(l.antal>1?', antal '+l.antal:'')+')</span>'+(l.deleted?' <b>raderad '+esc(hhmm(l.deleted.ts))+'</b>':'')+'</span><span class="ov-st"><span class="tag'+(L?' on':'')+'">'+(L?'Lastad '+esc(hhmm(L.ts)):'Ej lastad')+'</span><span class="tag'+(U?' on':'')+'">'+(U?'Lossad '+esc(hhmm(U.ts)):'Ej lossad')+'</span></span></div>'}).join("")+'</div>'});
+  return h+'<p class="muted" style="font-size:13.5px">Uppdateras varje minut.</p>';
+}
 function render(){
   const M=$("#main");
   $("#switch").hidden=!S.sess;$("#switch").textContent="Logga ut";
@@ -186,32 +385,53 @@ function render(){
     return}
   $("#topbar").hidden=false;$("#status").hidden=false;
   const car=(S.bundle&&S.bundle.car)||{name:""};
-  $("#sub").textContent=car.name||"";
+  $("#sub").textContent=S.bundle&&S.bundle.role==="admin"?"Översikt":(car.name||"");
   if(!S.bundle){M.innerHTML='<div class="card muted">'+(S.err?esc(S.err):'Hämtar rutten…')+'</div>';return}
+  if(S.bundle.role==="admin"){M.innerHTML=renderAdmin();return}
   const ds=days();let h='';
   if(ds.length)h+='<div class="chips">'+ds.map(d=>'<button class="chip" data-date="'+d+'"'+(d===S.date?' aria-current="date"':'')+'>'+esc(dayLabel(d))+' <span>'+S.bundle.days[d].legs.length+' st</span></button>').join("")+'</div>';
   const r=route();
   if(!r){M.innerHTML=h+'<div class="card" style="font-size:17px">Ingen rutt är utskickad till '+esc(car.name)+' just nu.</div>';return}
   if(S.changed)h+='<div class="notice warn">Rutten har ändrats sedan du senast tittade.</div>';
+  const st=statesFor(S.bundle.dir,r.date),g=st.get("dag|godkand"),pc=pendingCount();
+  h+='<div class="card" style="display:flex;flex-direction:column;gap:10px">'+(g?'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between"><span class="done'+(g.pending?' wait':'')+'">✓ Dagens ordrar godkända '+esc(hhmm(g.ts))+'</span><button class="btn link" data-undo="godkand" data-order="dag">Ångra</button></div>':'<button class="btn go big" data-act="godkand" data-order="dag">Godkänn dagens ordrar</button><p class="muted" style="margin:0;font-size:14.5px">Gå igenom transporterna nedan och godkänn innan du börjar köra.</p>')+
+    (pc?'<p class="muted" style="margin:0;font-size:14px">'+pc+' tryck väntar på att skickas'+(S.bundle.status?' – skickas när nätet finns.':' – rapporteringen är inte inkopplad än.')+'</p>':'')+'</div>';
   h+='<div class="card" style="display:flex;flex-direction:column;gap:14px"><h2>'+esc(dayLabel(r.date))+'</h2><div class="stats"><div class="stat"><span class="k">Transporter</span><span class="v">'+r.legs.length+'</span></div>'+(r.driver?'<div class="stat"><span class="k">Förare</span><span class="v">'+esc(r.driver.split(" ")[0])+'</span></div>':'')+(r.reg?'<div class="stat"><span class="k">Bil</span><span class="v">'+esc(r.reg)+'</span></div>':'')+(r.trailer?'<div class="stat"><span class="k">Släp</span><span class="v">'+esc(r.trailer)+'</span></div>':'')+'<div class="stat"><span class="k">Uppdaterad</span><span class="v">'+esc(hhmm(r.updated))+'</span></div></div>'+
-    '<div class="acts"><button class="btn primary" data-save="'+esc(r.allPdf)+'" data-name="'+esc(r.allPdfName)+'">Spara alla deklarationer (PDF)</button></div>'+
+    '<div class="acts"><button class="btn primary" '+(allChanged()?'data-saveall="1"':'data-save="'+esc(r.allPdf)+'" data-name="'+esc(r.allPdfName)+'"')+'>Spara alla deklarationer (PDF)</button></div>'+
     '<p class="muted" style="margin:0;font-size:14.5px">Tryck <b>Spara</b> och välj <b>Spara i Filer</b>.</p></div>';
-  h+='<div class="legs">'+r.legs.map(l=>'<div class="leg"><div class="legtop"><span class="n">'+String(l.seq).padStart(2,"0")+'</span><span class="pills">'+(l.antal>1?'<span class="pill p-antal">Antal '+l.antal+'</span>':'')+'<span class="pill p-type">'+esc(l.uppdrag||"")+'</span><span class="pill p-'+esc(l.load)+'">'+esc(LOADS[l.load]||l.load)+' · '+esc(l.mangd)+'</span></span></div>'+
+  const legsAll=allLegs(S.bundle.dir,r.date,r.legs);
+  h+='<div class="legs">'+legsAll.map(l=>l.deleted?'<div class="leg" style="opacity:.6"><div class="legtop"><span class="n" style="text-decoration:line-through">'+String(l.pos).padStart(2,"0")+'</span><span class="pills"><span class="pill p-type">Raderad '+esc(hhmm(l.deleted.ts))+'</span></span></div><div class="note" style="text-decoration:line-through">'+esc(l.from.name)+' → '+esc(l.to.name)+'</div><div class="acts"><button class="btn link" data-undo="raderad" data-order="'+esc(l.order)+'">Ångra radering</button></div></div>':'<div class="leg'+(st.get(l.order+"|lossad")?' klar':'')+'"><div class="legtop"><span class="n">'+String(l.pos).padStart(2,"0")+'</span><span class="pills">'+(l.isNew?'<span class="pill p-del">Ny</span>':'')+(l.antal>1?'<span class="pill p-antal">Antal '+l.antal+'</span>':'')+'<span class="pill p-type">'+esc(l.uppdrag||"")+'</span><span class="pill p-'+esc(l.load)+'">'+esc(LOADS[l.load]||l.load)+' · '+esc(l.mangd)+'</span></span></div>'+
     '<div class="route"><div><span class="k">Hämta</span><b>'+esc(l.from.name)+'</b><span>'+esc(l.from.street)+', '+esc(l.from.zip)+' '+esc(l.from.city)+'</span></div><div class="arrow" aria-hidden="true">→</div><div><span class="k">Lämna</span><b>'+esc(l.to.name)+'</b><span>'+esc(l.to.street)+', '+esc(l.to.zip)+' '+esc(l.to.city)+'</span></div></div>'+
     (l.note?'<div class="note">'+esc(l.note)+'</div>':'')+
-    '<div class="acts"><button class="btn small" data-save="'+esc(l.pdf)+'" data-name="'+esc(l.pdfName)+'">Spara deklaration</button></div></div>').join("")+'</div>';
+    legActs(st,l,!!g)+
+    '<div class="acts">'+(l.isNew?'<button class="btn small" data-savenew="'+esc(l.order)+'">Spara deklaration</button>':'<button class="btn small" data-save="'+esc(l.pdf)+'" data-name="'+esc(l.pdfName)+'">Spara deklaration</button>')+
+      (S.confirmDel===l.order?'<span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span style="font-weight:600">Radera transport '+String(l.pos).padStart(2,"0")+'?</span><button class="btn small" style="background:var(--adr);border-color:var(--adr);color:#fff" data-del="'+esc(l.order)+'">Radera</button><button class="btn small" data-delcancel="1">Avbryt</button></span>':'<button class="btn link" data-delask="'+esc(l.order)+'">Radera</button>')+'</div></div>').join("")+'</div>'+
+    (r.date>=today()?'<div style="margin-top:12px">'+newFormHtml(r)+'</div>':'');
   M.innerHTML=h;
 }
 document.addEventListener("click",async e=>{
   const t=e.target.closest("button");if(!t||t.getAttribute("type")==="submit")return;
   if(t.id==="switch"){logout("");return}
   if(t.id==="refresh"){t.disabled=true;await refresh();t.disabled=false;toast(S.offline?"Ingen kontakt – visar senast hämtade.":"Uppdaterad.");return}
-  if(t.dataset.date){S.date=t.dataset.date;render();window.scrollTo(0,0);return}
+  if(t.dataset.date){S.date=t.dataset.date;render();window.scrollTo(0,0);await afterLoad();render();return}
+  if(t.dataset.act){t.disabled=true;await record(t.dataset.act,t.dataset.order);toast((NAMES[t.dataset.act]||"Sparat")+" "+hhmm(new Date().toISOString())+".");return}
+  if(t.dataset.newopen){S.newForm={from:"",to:"",load:"full",antal:1,note:""};render();return}
+  if(t.dataset.nfcancel){S.newForm=null;render();return}
+  if(t.dataset.nfload){readForm();S.newForm.load=t.dataset.nfload;render();return}
+  if(t.dataset.nfsave){readForm();S.newForm.err="";t.disabled=true;await createLeg();return}
+  if(t.dataset.delask){readForm();S.confirmDel=t.dataset.delask;render();return}
+  if(t.dataset.delcancel){S.confirmDel=null;render();return}
+  if(t.dataset.del){S.confirmDel=null;await record("raderad",t.dataset.del);toast("Transporten är raderad.");return}
+  if(t.dataset.savenew){const r=route();const l=allLegs(S.bundle.dir,r.date,r.legs).find(x=>x.order===t.dataset.savenew);if(l){t.disabled=true;try{await shareBlob(await makePdf([l],r),l.order+".pdf")}catch(err){toast("Kunde inte skapa PDF:en.")}t.disabled=false}return}
+  if(t.dataset.saveall){const r=route();const ls=allLegs(S.bundle.dir,r.date,r.legs).filter(l=>!l.deleted);t.disabled=true;try{await shareBlob(await makePdf(ls,r),r.allPdfName)}catch(err){toast("Kunde inte skapa PDF:en.")}t.disabled=false;return}
+  if(t.dataset.undo){await record("angra-"+t.dataset.undo,t.dataset.order);toast("Ångrat.");return}
   if(t.dataset.save){t.disabled=true;await savePdf(t.dataset.save,t.dataset.name);t.disabled=false;return}
 });
 document.addEventListener("submit",e=>{if(e.target.id==="loginForm"){e.preventDefault();const u=$("#user").value.trim(),pw=$("#pw").value.trim();if(!u||!pw){S.err="Fyll i användarnamn och lösenord.";render();return}login(u,pw)}});
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&S.sess)refresh()});
 setInterval(()=>{if(document.visibilityState==="visible"&&S.sess)refresh()},5*60*1000);
+setInterval(async()=>{if(document.visibilityState!=="visible"||!S.bundle)return;if(S.bundle.role==="admin"){await afterLoad();render()}else if(pendingCount()){await sync();render()}},60*1000);
+window.addEventListener("online",async()=>{if(S.bundle&&S.bundle.role==="driver"){await sync();render()}});
 if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
 refresh();
 })();
