@@ -303,6 +303,7 @@ function declOps(leg,r){
   P({t:"text",x:xs[6]+1.3,y:dy+.4,s:leg.mangd||"",f:"helv",z:10.5});
   if(leg.flakRows)leg.flakRows.forEach((t,i)=>P({t:"text",x:xs[0],y:ty+hh+dh+6+i*4.6,s:t,f:"helv",z:9}));
   else if(leg.flak)P({t:"text",x:xs[6]+1.3,y:dy+4.8,s:"Flak "+leg.flak,f:"helvB",z:8});
+  else if(leg.flakPlan&&leg.flakPlan.length&&leg.load!=="tom"){const fl=(typeof S!=="undefined"&&S.bundle&&S.bundle.flak)||{};leg.flakPlan.forEach((n,i)=>P({t:"text",x:xs[0],y:ty+hh+dh+6+i*4.6,s:"Flak "+n+(fl[n]?": "+m3(fl[n][1]):""),f:"helv",z:9}))}
   P({t:"img",x:23,y:262,w:47,h:18});
   const drv=leg.driver||r.driver||"";if(drv)P({t:"text",x:23,y:286,s:"Chaufför: "+drv,f:"helv",z:9.5});
   P({t:"text",x:187.5,y:286,s:"Order "+leg.order,f:"helv",z:7,a:"right",gray:true});
@@ -375,7 +376,7 @@ function withFlak(l,st){
   const f=lastFlak(st.get(l.order+"|lastad"));if(!f)return l;
   const o=Object.assign({},l,{flak:f.map(x=>x.nr).join(" + "),flakInfo:f.map(x=>x.nr+(x.p!=null?" ("+x.p+" bar)":"")).join(" + "),gen:true});
   if(f.every(x=>x.p!=null&&x.l>0)){const kg=f.map(x=>kgGas(x.p,x.l));o.kg=kg.reduce((a,b)=>a+b,0);o.mangd=sp(o.kg)+" kg";
-    o.flakRows=f.map((x,i)=>"Flak "+x.nr+": "+x.p+" bar, "+sp(kg[i])+" kg (ca "+sp(nm3(kg[i]))+" Nm³)")}
+    o.flakRows=f.map((x,i)=>"Flak "+x.nr+": "+m3(x.l)+", "+x.p+" bar, "+sp(kg[i])+" kg (ca "+sp(nm3(kg[i]))+" Nm³)")}
   else if(l.load!=="tom"&&f.every(x=>x.l>0))o.mangd=m3(f.reduce((t,x)=>t+x.l,0));
   return o;
 }
