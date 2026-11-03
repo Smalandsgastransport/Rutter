@@ -14,7 +14,7 @@
 <link rel="icon" href="icon-192.png">
 <style>
 :root{
-  --bg:#faf9f5;--surface:#fff;--sunk:#f0eee6;--line:#e5e2d8;--fg:#1f1e1d;--muted:#6b6a64;
+  --bg:#e9e5da;--surface:#fffefb;--sunk:#efece3;--line:#d6d1c3;--fg:#1f1e1d;--muted:#6b6a64;
   --accent:#00932a;--accent-fg:#fff;--accent-soft:#e2f4e5;--blue:#1f5fa8;--blue-soft:#e1ebf7;--brand:#00aa13;--adr:#d7261e;
   --full:#1d7a4a;--full-bg:#e1f2e8;--empty:#6b5a2a;--empty-bg:#f6eed6;--warn:#9a5b00;--warn-bg:#fdf0d6;
   --f-display:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
@@ -29,7 +29,7 @@
 html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
 body{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 .wrap{max-width:1000px;margin:0 auto;padding-block:16px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:14px}
-h1,h2,h3{font-family:var(--f-display);margin:0;font-weight:700}
+h1,h2,h3{font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;margin:0;font-weight:600;letter-spacing:-.01em}
 h1{font-size:32px;line-height:1.1;letter-spacing:-.01em}
 button,a.btn{font:inherit;color:inherit}
 .top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
@@ -125,7 +125,10 @@ html.wide #main{display:flex;flex-direction:column;gap:18px}
 .side .badge{background:#e5483d;color:#fff}
 .side .sidehd{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#8fc09b;padding:6px 14px 8px}
 .pagehead{padding-bottom:4px;border-bottom:1px solid var(--line);margin-bottom:2px}
-.card{box-shadow:0 1px 2px rgba(0,0,0,.04),0 4px 14px rgba(0,0,0,.03)}
+.card{box-shadow:0 1px 2px rgba(60,50,20,.06),0 6px 18px rgba(60,50,20,.05)}
+.tile{box-shadow:0 1px 2px rgba(60,50,20,.06)}
+.pagehead h2{font-size:34px}
+.pagehead{border-bottom-color:#cfc9ba}
 .bar{height:8px;border-radius:4px}
 .carcards{align-items:start;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
 .carcard{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;cursor:pointer;border-left:4px solid var(--line)}
