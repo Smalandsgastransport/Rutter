@@ -1,6 +1,6 @@
 // Gör appen användbar utan nät. Allt hämtas från nätet i första hand, så att nya versioner syns direkt;
 // den sparade kopian används bara när nätet saknas.
-const SHELL="shell-v29";
+const SHELL="shell-v30";
 const FILES=["./","index.html","manifest.webmanifest","icon-180.png","icon-192.png","icon-512.png","logo.svg","decl-logo.png"];
 self.addEventListener("install",e=>{e.waitUntil(caches.open(SHELL).then(c=>c.addAll(FILES.map(f=>new Request(f,{cache:"reload"})))).then(()=>self.skipWaiting()))});
 self.addEventListener("activate",e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==SHELL&&k!=="pdf-v2").map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});

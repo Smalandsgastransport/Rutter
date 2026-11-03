@@ -146,6 +146,17 @@ html.wide .plcol .legs{display:flex;flex-direction:column;gap:10px;grid-template
 .plcol .leg{padding:14px;min-width:0;max-width:100%;box-sizing:border-box}.plcol .legtop{flex-wrap:wrap;gap:8px}.plcol .pills{flex-wrap:wrap;justify-content:flex-start}.plcol .card,.plcol .legs{min-width:0;max-width:100%}.plcol .acts{flex-wrap:wrap}
 .plcol .carcard{cursor:default;border-top:4px solid var(--accent);border-left:1px solid var(--line)}
 @media (max-width:1250px){.plcols{grid-template-columns:1fr}}
+.sttable{padding:0;overflow-x:auto}
+.strow{display:grid;grid-template-columns:minmax(300px,2.2fr) 150px 90px 170px 170px 170px 170px 90px;gap:12px;align-items:center;padding:14px 18px;border-top:1px solid var(--line);font-size:14.5px;min-width:1250px}
+.strow.sthead{border-top:0;font-size:12.5px;font-weight:700;color:var(--muted);background:var(--sunk);position:sticky;top:0}
+.strow[data-stedit]{cursor:pointer}.strow[data-stedit]:hover{background:var(--sunk)}
+.strow .r{text-align:right}
+.stn{display:flex;flex-direction:column;gap:6px;align-items:flex-start}.stname{font-size:15.5px;text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--line)}
+.pills2{display:flex;gap:6px;flex-wrap:wrap}
+.bp{font-style:normal;display:inline-flex;gap:5px;align-items:center;background:var(--sunk);border:1px solid var(--line);border-radius:5px;padding:2px 8px;font-size:13px;color:var(--muted)}.bp b{color:var(--fg)}
+.bp u,.sts u{width:9px;height:9px;border-radius:50%;display:inline-block;text-decoration:none;background:#999}
+.red u{background:#d6453d}.yel u{background:#e5a526}.grn u{background:#2da44e}.gry u{background:#8d8b84}
+.sts{display:flex;gap:8px;align-items:center;font-size:14.5px}
 @media (max-width:900px){.shell{grid-template-columns:1fr}.side{position:static;flex-direction:row;overflow-x:auto}.side button{white-space:nowrap}}
 html.out,html.out body{background:var(--surface)}
 .btn.big{min-height:58px;font-size:18px;width:100%}
@@ -220,7 +231,7 @@ async function loadBundle(){
 }
 async function afterLoad(){
   if(!S.bundle)return;
-  if(S.bundle.role==='admin'){await loadPlansAdmin();await loadNotes();await loadPauser();await loadSwaps();
+  if(S.bundle.role==='admin'){await loadPlansAdmin();await loadNotes();await loadPauser();await loadSwaps();await loadStat();
     const ds=[...new Set([today(),iso(new Date(Date.now()+864e5)),S.pl.date||today(),S.date].filter(Boolean))];
     await Promise.all((S.bundle.planCars||[]).filter(c=>c.dir).map(async c=>{for(const d of (S.view==='paus'?[...new Set(ds.concat(pausDays()))]:ds)){await ghList(c.dir,d);await fetchNy(c.dir,d)}}))}
   else if(S.bundle.role==='driver'){await loadPlansDriver();await loadNotes();await loadPauser();await loadSwaps();await loadPeerPlans();for(const d of [today(),iso(new Date(Date.now()-864e5))]){await ghList(S.bundle.dir,d);await fetchNy(S.bundle.dir,d)}}
@@ -768,6 +779,48 @@ function swDo(id){
   S.pl.car=A.id;plSaveDraft();S.pl.car=B.id;plSaveDraft();
   put(B,g);if(t)put(A,t);
   S.pl.car=A.id;S.view="plan";swMutate(()=>{const x=S.swaps.find(y=>y.id===id);if(x){x.status="genomford";x.updated=new Date().toISOString()}},"Bytet ligger i planeringen. Kontrollera och skicka ut.");render()}
+
+/* ---------- Stationer ---------- */
+const STAT_SEED=[{"id": "s01", "name": "Vimmerby Älåkragatan", "tag": "Arne", "status": "b24", "kvar": 1022, "avlast": "tis 3 nov 2026, 15:09", "src": "", "normal": "tor 5 nov 2026, 12:23", "hog": "ons 4 nov 2026, 18:09", "forsta": "tor 5 nov 2026, 12:23", "perDygn": 529, "places": [19, 13, 142], "lager": null}, {"id": "s02", "name": "Ljungby Karlsrovägen", "tag": "Jesper", "status": "b48", "kvar": 3477, "avlast": "tis 3 nov 2026, 19:46", "src": "Blynk", "normal": "tor 5 nov 2026, 13:02", "hog": "tor 5 nov 2026, 10:49", "forsta": "tis 3 nov 2026, 19:46", "perDygn": 1775, "places": [29, 178, 192, 28], "lager": 206}, {"id": "s03", "name": "Högsby Verkstadsgatan/Maskingatan", "tag": "Arne", "status": "b48", "kvar": 513, "avlast": "tis 3 nov 2026, 15:09", "src": "", "normal": "fre 6 nov 2026, 13:40", "hog": "tor 5 nov 2026, 12:53", "forsta": "fre 6 nov 2026, 13:40", "perDygn": 144, "places": [15, 0, 82], "lager": null}, {"id": "s04", "name": "Växjö Vaktvägen", "tag": "Jesper", "status": "b48", "kvar": 2509, "avlast": "tis 3 nov 2026, 19:46", "src": "Blynk", "normal": "tor 5 nov 2026, 15:47", "hog": "tor 5 nov 2026, 13:11", "forsta": "ons 4 nov 2026, 07:51", "perDygn": 1047, "places": [189, 13, 60], "lager": 241}, {"id": "s05", "name": "Emmaboda Stenvägen", "tag": "Jesper", "status": "b48", "kvar": 558, "avlast": "tis 3 nov 2026, 15:09", "src": "", "normal": "fre 6 nov 2026, 10:07", "hog": "tor 5 nov 2026, 13:14", "forsta": "fre 6 nov 2026, 10:07", "perDygn": 178, "places": [1, 73, 3], "lager": null}, {"id": "s06", "name": "Hultsfred Nytorpsvägen", "tag": "Arne", "status": "b48", "kvar": 914, "avlast": "tis 3 nov 2026, 15:09", "src": "", "normal": "fre 6 nov 2026, 10:52", "hog": "tor 5 nov 2026, 13:34", "forsta": "tor 5 nov 2026, 19:27", "perDygn": 274, "places": [2, 2, 104], "lager": 280}, {"id": "s07", "name": "Värnamo", "tag": "Jesper", "status": "ok", "kvar": 2528, "avlast": "tis 3 nov 2026, 19:46", "src": "Blynk", "normal": "lör 7 nov 2026, 14:29", "hog": "fre 6 nov 2026, 05:19", "forsta": "ons 4 nov 2026, 04:12", "perDygn": 640, "places": [196, 22, 78], "lager": 244}, {"id": "s08", "name": "Smålandsstenar", "tag": "Jesper", "status": "ok", "kvar": 2502, "avlast": "tis 3 nov 2026, 19:46", "src": "Blynk", "normal": "fre 6 nov 2026, 16:26", "hog": "fre 6 nov 2026, 07:25", "forsta": "ons 4 nov 2026, 21:15", "perDygn": 672, "places": [19, 111, 167], "lager": 240}, {"id": "s09", "name": "Eksjö Stallbergavägen", "tag": "Arne", "status": "ok", "kvar": 1740, "avlast": "tis 3 nov 2026, 15:09", "src": "", "normal": "lör 7 nov 2026, 11:42", "hog": "fre 6 nov 2026, 08:52", "forsta": "ons 4 nov 2026, 15:39", "perDygn": 445, "places": [132, 12, 55], "lager": null}, {"id": "s10", "name": "Ronneby Viggenvägen", "tag": "Jesper", "status": "ok", "kvar": 1249, "avlast": "tis 3 nov 2026, 19:46", "src": "Blynk", "normal": "mån 9 nov 2026, 08:53", "hog": "fre 6 nov 2026, 13:17", "forsta": "sön 8 nov 2026, 14:52", "perDygn": 263, "places": [10, 139, 19], "lager": 241}, {"id": "s11", "name": "Nybro Sågaregatan", "tag": "Martin", "status": "ok", "kvar": 1064, "avlast": "tis 3 nov 2026, 15:09", "src": "", "normal": "mån 9 nov 2026, 15:38", "hog": "fre 6 nov 2026, 15:05", "forsta": "sön 8 nov 2026, 10:57", "perDygn": 216, "places": [3, 110], "lager": 240}, {"id": "s12", "name": "Ljungby", "tag": "Jesper", "status": "ok", "kvar": 1584, "avlast": "tis 3 nov 2026, 19:46", "src": "Blynk", "normal": "mån 9 nov 2026, 09:45", "hog": "fre 6 nov 2026, 19:21", "forsta": "mån 9 nov 2026, 07:20", "perDygn": 326, "places": [187, 20, 5], "lager": 189}, {"id": "s13", "name": "Växjö Dusavägen", "tag": "Jesper", "status": "ok", "kvar": 3110, "avlast": "tis 3 nov 2026, 19:46", "src": "Blynk", "normal": "sön 8 nov 2026, 20:02", "hog": "lör 7 nov 2026, 06:24", "forsta": "tor 5 nov 2026, 13:58", "perDygn": 671, "places": [186, 20, 137], "lager": 242}, {"id": "s14", "name": "Markaryd", "tag": "Jesper", "status": "ok", "kvar": 3091, "avlast": "tis 3 nov 2026, 19:46", "src": "Blynk", "normal": "tis 10 nov 2026, 13:42", "hog": "lör 7 nov 2026, 20:40", "forsta": "tor 5 nov 2026, 21:00", "perDygn": 456, "places": [19, 141, 180], "lager": 241}, {"id": "s15", "name": "Vetlanda Avfallsanläggning", "tag": "Arne", "status": "ok", "kvar": 1898, "avlast": "tis 3 nov 2026, 15:09", "src": "", "normal": "mån 9 nov 2026, 14:59", "hog": "sön 8 nov 2026, 14:02", "forsta": "ons 4 nov 2026, 16:42", "perDygn": 402, "places": [89, 192], "lager": null}, {"id": "s16", "name": "Älmhult, Danska Vägen", "tag": "Jesper", "status": "ok", "kvar": 2949, "avlast": "tis 3 nov 2026, 19:46", "src": "Blynk", "normal": "om mer än 14 dygn", "hog": "mån 9 nov 2026, 14:12", "forsta": "tor 12 nov 2026, 08:20", "perDygn": 137, "places": [190, 116, 20], "lager": 246}, {"id": "s17", "name": "Sölvesborg Galjalyckevägen", "tag": "Jesper", "status": "ok", "kvar": 3009, "avlast": "tis 3 nov 2026, 19:46", "src": "Blynk", "normal": "tor 12 nov 2026, 13:34", "hog": "mån 9 nov 2026, 15:36", "forsta": "fre 6 nov 2026, 16:32", "perDygn": 338, "places": [130, 13, 193], "lager": 242}, {"id": "s18", "name": "Tingsryd", "tag": "Jesper", "status": "ok", "kvar": 3436, "avlast": "tis 3 nov 2026, 19:46", "src": "Blynk", "normal": "tor 12 nov 2026, 09:04", "hog": "tis 10 nov 2026, 09:47", "forsta": "fre 6 nov 2026, 09:09", "perDygn": 394, "places": [150, 193, 20], "lager": 239}, {"id": "s19", "name": "Tranås", "tag": "Arne", "status": "ok", "kvar": 2224, "avlast": "tis 3 nov 2026, 19:46", "src": "Blynk", "normal": "tor 12 nov 2026, 12:13", "hog": "tis 10 nov 2026, 13:33", "forsta": "tor 5 nov 2026, 10:09", "perDygn": 251, "places": [200, 14, 47], "lager": 240}, {"id": "s20", "name": "Söderåkra Ekesvägen", "tag": "Martin", "status": "ok", "kvar": 1947, "avlast": "tis 3 nov 2026, 15:09", "src": "", "normal": "om mer än 14 dygn", "hog": "sön 15 nov 2026, 17:03", "forsta": "om mer än 14 dygn", "perDygn": 102, "places": [3, 161], "lager": 260}, {"id": "s21", "name": "Jönköping Syd, E4:an Torsvik", "tag": "", "status": "none", "kvar": null, "avlast": "", "src": "", "normal": "", "hog": "", "forsta": "", "perDygn": 1698, "places": [], "lager": null}, {"id": "s22", "name": "Jönköping Nord Rosenlund", "tag": "", "status": "none", "kvar": null, "avlast": "", "src": "", "normal": "", "hog": "", "forsta": "", "perDygn": 1433, "places": [], "lager": null}, {"id": "s23", "name": "Jönköping Centrum", "tag": "", "status": "none", "kvar": null, "avlast": "", "src": "", "normal": "", "hog": "", "forsta": "", "perDygn": 824, "places": [], "lager": null}];
+const STAT_SRC="Inläst från Flakplanering 3 nov 2026 kl 20:01 (skärmbild). Uppdateras manuellt tills direktkoppling finns.";
+S.stat=null;S.statSha=null;S.stTag="";S.stEdit=null;
+async function loadStat(){
+  if(!S.bundle||!S.bundle.planKey||!S.bundle.status)return;
+  try{const st=S.bundle.status,r=await fetch(GH+st.repo+"/contents/plan/_stationer/all.json?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});
+    if(r.status===404){if(!S.stat)S.stat=JSON.parse(JSON.stringify(STAT_SEED));return}if(!r.ok)throw 0;const j=await r.json();S.statSha=j.sha;S.stat=await openPlan(unb64(j.content.replace(/\n/g,"")))}
+  catch(e){if(!S.stat)S.stat=JSON.parse(JSON.stringify(STAT_SEED))}
+}
+async function saveStat(){const st=S.bundle.status;
+  const body={message:"Stationer",content:b64(await sealPlan(S.stat))};if(S.statSha)body.sha=S.statSha;
+  const r=await fetch(GH+st.repo+"/contents/plan/_stationer/all.json",{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify(body)});if(!r.ok)throw new Error("put "+r.status);S.statSha=(await r.json()).content.sha}
+const STS={b24:["Byt inom 24 h","red"],b48:["Byt inom 2 dygn","yel"],ok:["Räcker","grn"],none:["Ingen avläsning","gry"]};
+const fmtDT=d=>DAYS[d.getDay()].slice(0,3)+" "+d.getDate()+" "+MON[d.getMonth()]+" "+d.getFullYear()+", "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+const kgS=n=>n==null?"–":String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g," ")+" kg";
+const barCls=b=>b<21?"red":b<80?"yel":"grn";
+function statOrder(a,b){const r={b24:0,b48:1,ok:2,none:3};if(r[a.status]!==r[b.status])return r[a.status]-r[b.status];const h=x=>x.kvar&&x.perDygn?x.kvar/x.perDygn:1e9;return h(a)-h(b)}
+function renderStat(){
+  const L=S.stat||[],tags=[...new Set(L.map(x=>x.tag).filter(Boolean))];
+  const list=L.filter(x=>!S.stTag||x.tag===S.stTag).slice().sort(statOrder);
+  const n24=L.filter(x=>x.status==="b24"),sum=L.reduce((a,x)=>a+(x.perDygn||0),0),n48=L.filter(x=>x.status==="b48").length;
+  let h='<div class="pagehead"><h2>Stationer</h2><p class="muted">Tryck, gasmängd och prognos per station. Sorterat på när gasen tar slut.</p></div>';
+  h+='<div class="tiles"><div class="tile'+(n24.length?' hot':'')+'"><span class="k">Behöver byte inom 24 h</span><span class="v">'+n24.length+' <small>station'+(n24.length===1?'':'er')+'</small></span><span class="muted" style="font-size:13px">'+esc(n24.map(x=>x.name).join(", ")||"–")+'</span></div>'+
+    '<div class="tile"><span class="k">Byte inom 2 dygn</span><span class="v">'+n48+' <small>stationer</small></span></div>'+
+    '<div class="tile"><span class="k">Förbrukning per dygn</span><span class="v">'+esc(kgS(sum))+'</span><span class="muted" style="font-size:13px">'+L.filter(x=>x.perDygn).length+' stationer</span></div>'+
+    '<div class="tile"><span class="k">Stationer</span><span class="v">'+L.length+'</span><span class="muted" style="font-size:13px">'+L.filter(x=>x.status==="none").length+' saknar avläsning</span></div></div>';
+  h+='<div class="chips"><span class="muted" style="font-size:12px;letter-spacing:.08em;align-self:center">TAGG</span><button class="chip" data-sttag=""'+(!S.stTag?' aria-current="date"':'')+'>Alla '+L.length+'</button>'+tags.map(t=>'<button class="chip" data-sttag="'+esc(t)+'"'+(S.stTag===t?' aria-current="date"':'')+'>'+esc(t)+' '+L.filter(x=>x.tag===t).length+'</button>').join("")+'</div>';
+  if(S.stEdit){const x=L.find(y=>y.id===S.stEdit);if(x){const inp='style="font:inherit;font-size:16px;padding:8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg);width:100%"';
+    h+='<div class="card" style="display:flex;flex-direction:column;gap:10px"><h3>Läs av · '+esc(x.name)+'</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px">'+
+     '<label class="fld">Tryck flakplatser (bar, kommaseparerat)<input id="seP" value="'+esc(x.places.join(", "))+'" '+inp+'></label><label class="fld">Lager (bar)<input id="seL" value="'+esc(x.lager==null?"":x.lager)+'" '+inp+'></label>'+
+     '<label class="fld">Kvar nu (kg)<input id="seK" inputmode="numeric" value="'+esc(x.kvar==null?"":x.kvar)+'" '+inp+'></label><label class="fld">Förbrukning per dygn (kg)<input id="seD" inputmode="numeric" value="'+esc(x.perDygn||"")+'" '+inp+'></label>'+
+     '<label class="fld">Ansvarig (tagg)<input id="seT" value="'+esc(x.tag||"")+'" '+inp+'></label><label class="fld">Status<select id="seS" '+inp+'>'+Object.keys(STS).map(k=>'<option value="'+k+'"'+(x.status===k?' selected':'')+'>'+STS[k][0]+'</option>').join("")+'</select></label></div>'+
+     '<div class="acts"><button class="btn go" data-stsave="'+esc(x.id)+'">Spara avläsning</button><button class="btn" data-stcancel="1">Avbryt</button></div><p class="muted" style="margin:0;font-size:13px">Prognosen räknas om från Kvar nu och Per dygn när du sparar.</p></div>'}}
+  h+='<div class="card sttable"><div class="strow sthead"><span>Station</span><span>Status</span><span class="r">Kvar nu</span><span>Avläst</span><span>Tar slut, normal</span><span>Tar slut, hög</span><span>Första flaket tomt</span><span class="r">Per dygn</span></div>'+
+   list.map(x=>{const st=STS[x.status]||STS.none;
+    return '<div class="strow" data-stedit="'+esc(x.id)+'" role="button" tabindex="0"><span class="stn"><b class="stname">'+esc(x.name)+'</b>'+(x.tag?'<span class="tag">'+esc(x.tag)+'</span>':'')+
+     '<span class="pills2">'+x.places.map((b,i)=>'<i class="bp '+barCls(b)+'"><u></u>'+(i+1)+' <b>'+b+'</b> bar</i>').join("")+(x.lager!=null?'<i class="bp '+(x.lager<200?'red':'grn')+'"><u></u>Lager <b>'+x.lager+'</b> bar</i>':'')+'</span></span>'+
+     '<span class="sts '+st[1]+'"><u></u><b>'+esc(st[0])+'</b></span><span class="r">'+esc(x.kvar==null?"—":kgS(x.kvar))+'</span><span>'+esc(x.avlast||"—")+(x.src?'<br><small class="muted">'+esc(x.src)+'</small>':'')+'</span><span>'+esc(x.normal||"—")+'</span><span>'+esc(x.hog||"—")+'</span><span>'+esc(x.forsta||"—")+'</span><span class="r">'+esc(kgS(x.perDygn||null))+'</span></div>'}).join("")+'</div>';
+  h+='<p class="muted" style="font-size:13px">'+esc(STAT_SRC)+' Klicka på en station för att läsa av.</p>';
+  return h}
 function isOv(){return !!S.bundle&&(S.bundle.role==="admin"||S.bundle.role==="ekonomi")}
 S.view="ov";
 function tbl(head,rows,foot){return '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:15px"><thead><tr>'+head.map((h,i)=>'<th style="text-align:'+(i?'right':'left')+';padding:6px 8px;border-bottom:2px solid var(--line);white-space:nowrap">'+esc(h)+'</th>').join("")+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map((c,i)=>'<td style="text-align:'+(i?'right':'left')+';padding:6px 8px;border-bottom:1px solid var(--line)">'+esc(c)+'</td>').join("")+'</tr>').join("")+(foot?'<tr>'+foot.map((c,i)=>'<td style="text-align:'+(i?'right':'left')+';padding:6px 8px;font-weight:700">'+esc(c)+'</td>').join("")+'</tr>':'')+'</tbody></table></div>'}
@@ -887,14 +940,14 @@ function render(){
     return}
   $("#topbar").hidden=false;$("#status").hidden=false;
   const car=(S.bundle&&S.bundle.car)||{name:""};
-  $("#sub").textContent=S.bundle&&S.bundle.role==="admin"?({ov:"Översikt",plan:"Planering",msg:"Meddelanden",paus:"Pauser",sum:"Sammanställning"}[S.view]||"Översikt"):S.bundle&&S.bundle.role==="ekonomi"?"Sammanställning":(car.name||"");
+  $("#sub").textContent=S.bundle&&S.bundle.role==="admin"?({ov:"Översikt",plan:"Planering",msg:"Meddelanden",paus:"Pauser",stat:"Stationer",sum:"Sammanställning"}[S.view]||"Översikt"):S.bundle&&S.bundle.role==="ekonomi"?"Sammanställning":(car.name||"");
   if(!S.bundle){M.innerHTML='<div class="card muted">'+(S.err?esc(S.err):'Hämtar rutten…')+'</div>';return}
   if(isOv()){
     if(S.bundle.role==="ekonomi"){M.innerHTML='<div class="content">'+renderSum()+'</div>';return}
     const cnt=(S.bundle.planCars||[]).reduce((a,c)=>a+notisAll(c.dir,today()).length+notisAll(c.dir,iso(new Date(Date.now()+864e5))).length,0);
-    const items=[["ov","Översikt",cnt],["plan","Planering",0],["msg","Meddelanden",0],["paus","Pauser",0],["sum","Sammanställning",0]];
+    const items=[["ov","Översikt",cnt],["plan","Planering",0],["msg","Meddelanden",0],["stat","Stationer",0],["paus","Pauser",0],["sum","Sammanställning",0]];
     const nav='<nav class="side"><div class="sidehd">Kontoret</div>'+items.map(([k,l,n])=>'<button data-view="'+k+'"'+(S.view===k?' aria-current="page"':'')+'><span>'+l+'</span>'+(n?'<i class="badge">'+n+'</i>':'')+'</button>').join("")+'</nav>';
-    M.innerHTML='<div class="shell">'+nav+'<div class="content">'+(S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="paus"?renderPaus():renderAdmin())+'</div></div>';return}
+    M.innerHTML='<div class="shell">'+nav+'<div class="content">'+(S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'</div></div>';return}
   const ds=days();let h='';
   if(ds.length)h+='<div class="chips">'+ds.map(d=>'<button class="chip" data-date="'+d+'"'+(d===S.date?' aria-current="date"':'')+'>'+esc(dayLabel(d))+' <span>'+S.bundle.days[d].legs.length+' st</span></button>').join("")+'</div>';
   const r=route();
@@ -921,7 +974,7 @@ function render(){
 document.addEventListener("pointerdown",e=>{if(!S.bundle||S.bundle.role!=="admin")return;const c=e.target.closest&&e.target.closest("[data-col]");if(c&&c.dataset.col!==S.pl.car){readPl();S.pl.car=c.dataset.col;S.pl.form=null}},true);
 document.addEventListener("focusin",e=>{if(!S.bundle||S.bundle.role!=="admin")return;const c=e.target.closest&&e.target.closest("[data-col]");if(c&&c.dataset.col!==S.pl.car){S.pl.car=c.dataset.col;S.pl.form=null}},true);
 document.addEventListener("click",async e=>{
-  const t=e.target.closest("button,[data-pcar]");if(!t||t.getAttribute("type")==="submit")return;
+  const t=e.target.closest("button,[data-pcar],[data-stedit]");if(!t||t.getAttribute("type")==="submit")return;
   if(t.id==="switch"){logout("");return}
   if(t.id==="refresh"){t.disabled=true;await refresh();t.disabled=false;toast(S.offline?"Ingen kontakt – visar senast hämtade.":"Uppdaterad.");return}
   if(t.dataset.csv){const O=sumData(S.sumTab||"tot"),rows=rapportRows(S.sumTab||"tot",O);const q=v=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"';
@@ -972,6 +1025,15 @@ document.addEventListener("click",async e=>{
     await swMutate(()=>{const x=S.swaps.find(y=>y.id===id);if(x){x.status=st;x.updated=new Date().toISOString()}},st==="accepterad"?"Accepterat. Kontoret genomför bytet.":st==="avvisad"?"Avvisat.":"Återkallat.");return}
   if(t.dataset.swdo){swDo(t.dataset.swdo);return}
   if(t.dataset.swdel){const id=t.dataset.swdel;await swMutate(()=>{S.swaps=S.swaps.filter(y=>y.id!==id)},"Borttaget.");return}
+  if(t.dataset.sttag!==undefined){S.stTag=t.dataset.sttag;render();return}
+  if(t.dataset.stedit){S.stEdit=t.dataset.stedit;render();window.scrollTo(0,0);return}
+  if(t.dataset.stcancel){S.stEdit=null;render();return}
+  if(t.dataset.stsave){const x=S.stat.find(y=>y.id===t.dataset.stsave),g=id=>document.getElementById(id).value.trim(),num=v=>{const n=parseFloat(String(v).replace(/\s/g,"").replace(",","."));return isNaN(n)?null:n};
+    const keep=JSON.stringify(x);
+    x.places=g("seP").split(/[,; ]+/).map(num).filter(v=>v!=null);x.lager=num(g("seL"));x.kvar=num(g("seK"));x.perDygn=num(g("seD"))||x.perDygn;x.tag=g("seT");x.status=g("seS");
+    const now=new Date();x.avlast=fmtDT(now);x.src="manuell";
+    if(x.kvar!=null&&x.perDygn){const hN=x.kvar/x.perDygn*24,add=h=>fmtDT(new Date(now.getTime()+h*36e5));x.normal=hN>336?"om mer än 14 dygn":add(hN);x.hog=add(hN*.62);x.forsta=add(hN*.62)}
+    try{await saveStat();S.stEdit=null;toast("Avläsningen är sparad.")}catch(e){Object.assign(x,JSON.parse(keep));toast("Kunde inte spara. Försök igen.")}render();return}
   if(t.dataset.popen){S.pf=true;render();return}
   if(t.dataset.pcancel){S.pf=null;render();return}
   if(t.dataset.pstart){S.pf=null;await pausQueue("paus",today(),{id:"p"+Date.now(),kind:t.dataset.pstart,start:new Date().toISOString()});toast("Pausen är startad.");return}
