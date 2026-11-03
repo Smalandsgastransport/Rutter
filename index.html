@@ -410,20 +410,19 @@ function tbl(head,rows,foot){return '<div style="overflow-x:auto"><table style="
 function histCards(){
   const H=S.bundle.hist;
   if(!H||!H.dagar||!H.dagar.length)return '<div class="card"><h3 style="font-size:19px">Kilometer och bränsle</h3><p class="muted" style="margin:6px 0 0">Ingen km-data inlagd än.</p></div>';
-  const M={},MN=["januari","februari","mars","april","maj","juni","juli","augusti","september","oktober","november","december"];
-  H.dagar.forEach(d=>{const k=d.datum.slice(0,7),m=M[k]||(M[k]={dagar:0,km:0,rut:0,kund:0,slap:0,slapKm:0});m.dagar++;m.km+=d.km||0;
-    d.rutter.forEach(r=>{m.rut++;m.kund+=r.kund||0;if(r.slap){m.slap++;m.slapKm+=r.km||0}})});
+  const MN=["januari","februari","mars","april","maj","juni","juli","augusti","september","oktober","november","december"],names={bil1:"Bil 1",bil2:"Bil 2",bil3:"Bil 3"};
   const n1=x=>(Math.round(x*10)/10).toLocaleString("sv-SE");
-  const rows=Object.keys(M).sort().map(k=>{const m=M[k];return [MN[+k.slice(5)-1]+" "+k.slice(0,4),String(m.dagar),n1(m.km),String(m.rut),String(m.kund),m.kund?n1(m.km/m.kund):"–",String(m.slap)]});
-  const tot=Object.values(M).reduce((a,m)=>({dagar:a.dagar+m.dagar,km:a.km+m.km,rut:a.rut+m.rut,kund:a.kund+m.kund,slap:a.slap+m.slap}),{dagar:0,km:0,rut:0,kund:0,slap:0});
-  const names={bil1:"Bil 1",bil2:"Bil 2",bil3:"Bil 3"};
-  const fuel=Object.keys(H.bilar||{}).map(k=>[names[k]||k,H.bilar[k].reg,H.bilar[k].fuel||"–"]);
-  const perDag=H.dagar.slice().sort((a,b)=>a.datum<b.datum?1:-1).map(d=>[d.datum,names[d.car]||d.car,(d.forare||"").split(" ")[0],n1(d.km),String(d.rutter.length),String(d.rutter.reduce((a,r)=>a+(r.kund||0),0)),String(d.rutter.filter(r=>r.slap).length)]);
-  const hKm={};H.dagar.forEach(d=>d.rutter.forEach(r=>r.stopp.forEach(x=>{const o=String(x.plats||"").replace(/\s*\(.*\)/,"");const e=hKm[o]||(hKm[o]={n:0,km:0});e.n++;e.km+=0})));
+  const M={};H.dagar.forEach(d=>{const k=d.datum.slice(0,7)+"|"+d.car,m=M[k]||(M[k]={dagar:0,km:0,rut:0,kund:0,slap:0,r:false});m.dagar++;m.km+=d.km||0;
+    if(d.rutter&&d.rutter.length){m.r=true;d.rutter.forEach(r=>{m.rut++;m.kund+=r.kund||0;if(r.slap)m.slap++})}else if(d.slapDag)m.slap++});
+  const row=(k,m)=>{const [ym,car]=k.split("|");return [MN[+ym.slice(5)-1]+" "+ym.slice(0,4),names[car]||car,String(m.dagar),n1(m.km),m.r?String(m.kund):"–",m.r&&m.kund?n1(m.km/m.kund):"–",String(m.slap)]};
+  const keys=Object.keys(M).sort();
+  const tot=Object.values(M).reduce((a,m)=>({dagar:a.dagar+m.dagar,km:a.km+m.km}),{dagar:0,km:0});
+  const fuel=Object.keys(H.bilar||{}).map(k=>[names[k]||k,H.bilar[k].reg||"–",H.bilar[k].fuel||"–",H.bilar[k].slap||"–"]);
+  const perDag=H.dagar.slice().sort((a,b)=>a.datum<b.datum?1:a.datum>b.datum?-1:0).map(d=>[d.datum,names[d.car]||d.car,(d.forare||"").split(" ")[0],n1(d.km),d.rutter&&d.rutter.length?String(d.rutter.filter(r=>r.slap).length)+" släp-rutter":(d.slapDag?"Ja":"Nej")]);
   const sec=(t,h)=>'<div class="card" style="display:flex;flex-direction:column;gap:10px"><h3 style="font-size:19px">'+t+'</h3>'+h+'</div>';
-  return sec("Kilometer (från milrapporten)",tbl(["Månad","Dagar","Km","Rutter","Kundstopp","Km/stopp","Släp-rutter"],rows,["Totalt",String(tot.dagar),n1(tot.km),String(tot.rut),String(tot.kund),tot.kund?n1(tot.km/tot.kund):"–",String(tot.slap)]))+
-    sec("Bränsle",tbl(["Bil","Reg.nr","Bränsle"],fuel))+
-    sec("Körda dagar (historik)",tbl(["Datum","Bil","Förare","Km","Rutter","Kundstopp","Släp"],perDag));
+  return sec("Kilometer (från milrapporterna)",tbl(["Månad","Bil","Dagar","Km","Kundstopp","Km/stopp","Släp"],keys.map(k=>row(k,M[k])),["Totalt","",String(tot.dagar),n1(tot.km),"","",""])+'<p class="muted" style="margin:0;font-size:13.5px">Kundstopp finns bara för bilar där milrapporten delar upp dagen i rutter (Bil 1). Släp för Bil 3 = dagar då släpet följde med.</p>')+
+    sec("Bilar och bränsle",tbl(["Bil","Reg.nr","Bränsle","Släp"],fuel))+
+    sec("Körda dagar (historik)",tbl(["Datum","Bil","Förare","Km","Släp"],perDag));
 }
 function renderSum(){
   const B=S.bundle,days=[],byFrom={},byTo={},byCar={},T={legs:0,done:0,kg:0,rep:0,fullN:0,flak:0,trl:0},trl=[];
