@@ -690,6 +690,48 @@ function notisForm(){
     '<div class="acts"><button class="btn go" data-ntsend="1">Skicka</button><button class="btn" data-ntcancel="1">Avbryt</button></div></div>'}
 function readNt(){const g=id=>document.getElementById(id);if(S.nt){if(g("ntTid"))S.nt.tid=g("ntTid").value;if(g("ntText"))S.nt.text=g("ntText").value}}
 
+/* ---------- Deklarationer på enheten (fungerar utan nät) ---------- */
+S.dk={sig:{},n:0,total:0,busy:false};
+const DKDB=()=>new Promise((ok,no)=>{const q=indexedDB.open("decl",1);q.onupgradeneeded=()=>q.result.createObjectStore("kv");q.onsuccess=()=>ok(q.result);q.onerror=()=>no(q.error)});
+async function dkKv(k,v){const db=await DKDB();return new Promise((ok,no)=>{const t=db.transaction("kv",v===undefined?"readonly":"readwrite"),o=t.objectStore("kv"),q=v===undefined?o.get(k):o.put(v,k);q.onsuccess=()=>ok(q.result);q.onerror=()=>no(q.error)})}
+const dkSig=(l,r)=>JSON.stringify([l.order,l.from,l.to,l.mangd,l.flak,l.flakRows,l.flakPlan,l.antal,l.load,l.pdf,r.driver,r.reg,r.trailer,r.date,r.dDate]);
+async function dkBlob(l,r){
+  if(l.pdf&&!l.isNew&&!l.gen&&!l.local){try{const car=carOf(S.sess.u),buf=await fetchBin("data/"+car.dir+"/"+l.pdf);return new Blob([await open(S.key,buf)],{type:"application/pdf"})}catch(e){}}
+  return makePdf([l],r)}
+async function dkSync(){
+  if(S.dk.busy||!S.bundle||S.bundle.role!=="driver"||!window.indexedDB)return;S.dk.busy=true;
+  try{try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
+    let n=0,tot=0;const dir=S.bundle.dir;
+    for(const d of Object.keys(S.bundle.days)){const r=S.bundle.days[d];
+      for(const l of allLegs(dir,d,r.legs).filter(x=>!x.deleted)){const key=dir+"|"+d+"|"+l.order,sg=dkSig(l,r);tot+=d===S.date?1:0;
+        let cur=S.dk.sig[key];if(cur===undefined){const e=await dkKv(key);cur=S.dk.sig[key]=e?e.sig:null}
+        if(cur!==sg){try{const blob=await dkBlob(l,r);await dkKv(key,{sig:sg,blob});S.dk.sig[key]=sg}catch(e){continue}}
+        if(d===S.date)n++}}
+    const ch=n!==S.dk.n||tot!==S.dk.total;S.dk.n=n;S.dk.total=tot;if(ch)render()}
+  finally{S.dk.busy=false}}
+function dkClose(){const o=document.getElementById("dkview");if(o){o.querySelectorAll("[data-u]").forEach(x=>URL.revokeObjectURL(x.dataset.u));o.remove()}}
+async function dkOpen(){
+  const r=route();if(!r)return;dkClose();const dir=S.bundle.dir,legs=allLegs(dir,r.date,r.legs).filter(x=>!x.deleted);
+  const o=document.createElement("div");o.id="dkview";o.style.cssText="position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column;padding:12px;gap:10px;overflow:auto";
+  o.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:19px">Godsdeklarationer · '+esc(dayLabel(r.date))+'</b><button class="btn" data-dk="close">Stäng</button></div><div class="muted" style="font-size:14px">Sparade på den här enheten. Fungerar utan internet.</div><div id="dkl" style="display:flex;flex-direction:column;gap:8px"></div><div id="dkf" style="flex:1;min-height:0;display:none;flex-direction:column;gap:6px"></div>';
+  document.body.appendChild(o);const L=o.querySelector("#dkl");
+  const entries=[];
+  for(const l of legs){const key=dir+"|"+r.date+"|"+l.order;let e=null;try{e=await dkKv(key)}catch(x){}
+    let blob=e&&e.sig===dkSig(l,r)?e.blob:null;if(!blob){try{blob=await dkBlob(l,r)}catch(x){}}
+    entries.push({l,blob})}
+  L.innerHTML=entries.map((x,i)=>'<button class="card" data-dk="show" data-i="'+i+'" style="text-align:left;display:flex;justify-content:space-between;gap:10px;margin:0;padding:12px 14px;cursor:pointer"><span><b>'+String(x.l.pos).padStart(2,"0")+'</b> '+esc(x.l.from.name)+' → '+esc(x.l.to.name)+'</span><span class="muted">'+(x.blob?"Visa ›":"saknas")+'</span></button>').join("");
+  o._e=entries}
+document.addEventListener("click",async e=>{
+  const t=e.target.closest("[data-dk]");if(!t)return;const a=t.dataset.dk;
+  if(a==="open"){await dkOpen();return}
+  if(a==="close"){dkClose();return}
+  if(a==="back"){const o=document.getElementById("dkview");o.querySelector("#dkf").style.display="none";o.querySelector("#dkl").style.display="flex";return}
+  if(a==="show"){const o=document.getElementById("dkview"),x=o._e[+t.dataset.i];if(!x||!x.blob){toast("Deklarationen kunde inte skapas.");return}
+    const u=URL.createObjectURL(x.blob),F=o.querySelector("#dkf");o.querySelector("#dkl").style.display="none";F.style.display="flex";
+    F.innerHTML='<div style="display:flex;gap:8px"><button class="btn" data-dk="back">‹ Alla</button><a class="btn" href="'+u+'" target="_blank" style="text-decoration:none">Öppna i helskärm</a></div><iframe data-u="'+u+'" src="'+u+'" style="flex:1;min-height:70vh;border:0;background:#fff;border-radius:4px"></iframe>'}
+});
+function dkBadge(){const n=S.dk.n,t=S.dk.total;if(!t)return "";return '<p class="'+(n>=t?"":"warn ")+'muted" style="margin:0;font-size:14px">'+(n>=t?'✓ Alla '+t+' deklarationer är sparade på den här enheten och fungerar utan nät.':'Sparar deklarationer på enheten… '+n+' av '+t)+'</p>'}
+
 /* ---------- Ledighetsansökan ---------- */
 const LT={semester:"Semester",ledig:"Ledig dag",foraldra:"Föräldraledighet",vab:"VAB",annat:"Annat"};
 S.led=[];S.ledSha=null;S.lv={form:null,m:null};
@@ -1026,6 +1068,7 @@ function renderAdmin(){
   return h+'</div><p class="muted" style="font-size:13.5px">Uppdateras varje minut.</p>';
 }
 function render(){
+  if(S.bundle&&S.bundle.role==="driver"&&!S.dk.busy)setTimeout(dkSync,50);
   readLast();readNt();readLv();if(S.bundle&&S.bundle.role==='admin'&&S.view==='msg')readMsg();if(S.bundle&&S.bundle.role==='admin'&&S.view==='plan')readPl();
   const M=$("#main");
   $("#switch").hidden=!S.sess;$("#switch").textContent="Logga ut";
@@ -1066,7 +1109,7 @@ function render(){
   h+='<div class="card" style="display:flex;flex-direction:column;gap:10px">'+(g?'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between"><span class="done'+(g.pending?' wait':'')+'">✓ Dagens ordrar godkända '+esc(hhmm(g.ts))+'</span><button class="btn link" data-undo="godkand" data-order="dag">Ångra</button></div>':'<button class="btn go big" data-act="godkand" data-order="dag">Godkänn dagens ordrar</button><p class="muted" style="margin:0;font-size:14.5px">Gå igenom transporterna nedan och godkänn innan du börjar köra.</p>')+
     (pc?'<p class="muted" style="margin:0;font-size:14px">'+pc+' tryck väntar på att skickas'+(S.bundle.status?' – skickas när nätet finns.':' – rapporteringen är inte inkopplad än.')+'</p>':'')+'</div>';
   h+='<div class="card" style="display:flex;flex-direction:column;gap:14px"><h2>'+esc(dayLabel(r.date))+'</h2><div class="stats"><div class="stat"><span class="k">Transporter</span><span class="v">'+r.legs.length+'</span></div>'+(r.driver?'<div class="stat"><span class="k">Förare</span><span class="v">'+esc(r.driver.split(" ")[0])+'</span></div>':'')+(r.reg?'<div class="stat"><span class="k">Bil</span><span class="v">'+esc(r.reg)+'</span></div>':'')+(r.trailer?'<div class="stat"><span class="k">Släp</span><span class="v">'+esc(r.trailer)+'</span></div>':'')+'<div class="stat"><span class="k">Uppdaterad</span><span class="v">'+esc(hhmm(r.updated))+'</span></div></div>'+
-    '<div class="acts"><button class="btn primary" '+(allChanged()||!r.allPdf?'data-saveall="1"':'data-save="'+esc(r.allPdf)+'" data-name="'+esc(r.allPdfName)+'"')+'>Spara alla deklarationer (PDF)</button></div>'+
+    dkBadge()+'<div class="acts"><button class="btn primary" data-dk="open">Visa deklarationer</button><button class="btn" '+(allChanged()||!r.allPdf?'data-saveall="1"':'data-save="'+esc(r.allPdf)+'" data-name="'+esc(r.allPdfName)+'"')+'>Spara alla deklarationer (PDF)</button></div>'+
     '<p class="muted" style="margin:0;font-size:14.5px">Tryck <b>Spara</b> och välj <b>Spara i Filer</b>.</p></div>';
   const legsAll=allLegs(S.bundle.dir,r.date,r.legs);
   h+='<div class="legs">'+legsAll.map(l=>l.deleted?'<div class="leg" style="opacity:.6"><div class="legtop"><span class="n" style="text-decoration:line-through">'+String(l.pos).padStart(2,"0")+'</span><span class="pills"><span class="pill p-type">Raderad '+esc(hhmm(l.deleted.ts))+'</span></span></div><div class="note" style="text-decoration:line-through">'+esc(l.from.name)+' → '+esc(l.to.name)+'</div><div class="acts"><button class="btn link" data-undo="raderad" data-order="'+esc(l.order)+'">Ångra radering</button></div></div>':'<div class="leg'+(st.get(l.order+"|lossad")?' klar':'')+'"><div class="legtop"><span class="n">'+String(l.pos).padStart(2,"0")+'</span><span class="pills">'+(l.isNew?'<span class="pill p-del">Ny</span>':'')+(l.antal>1?'<span class="pill p-antal">Antal '+l.antal+'</span>':'')+'<span class="pill p-type">'+esc(l.uppdrag||"")+'</span>'+(l.flakPlan&&l.flakPlan.length&&!l.flak?'<span class="pill p-antal">Flak '+esc(l.flakPlan.join(" + "))+'</span>':'')+'<span class="pill p-'+esc(l.load)+'">'+esc(LOADS[l.load]||l.load)+' · '+esc(l.mangd)+'</span></span></div>'+
