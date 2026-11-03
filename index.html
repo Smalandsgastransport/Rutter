@@ -518,7 +518,11 @@ function plDraft(){
   const k=planKeyOf();
   if(!S.pl.drafts[k]){let d=null;try{d=JSON.parse(store.get("pl:"+k)||"null")}catch(e){}
     const base=S.plans[k];if(base&&base.legs&&base.legs.length)base.sent=base.updated;
-    S.pl.drafts[k]=d||(base?JSON.parse(JSON.stringify(base)):{date:S.pl.date,car:S.pl.car,carName:planCar().name,driver:planCar().driver||"",trailer:planCar().trailer||"",reg:planCar().reg||"",legs:[],next:1,sent:null,dirty:false})}
+    let imp=null;if(!d&&!base){const oc=S.bundle.cars.find(x=>x.dir===planCar().dir),od=oc&&oc.days&&oc.days[S.pl.date];
+      if(od&&od.legs&&od.legs.length){const pre=S.pl.date.slice(2).replace(/-/g,"")+"-B"+String(S.pl.car).replace(/\D/g,"")+"-";
+        imp={date:S.pl.date,car:S.pl.car,carName:planCar().name,driver:od.driver||planCar().driver||"",trailer:od.trailer||planCar().trailer||"",reg:od.reg||planCar().reg||"",next:od.legs.length+1,sent:od.updated||Date.now(),dirty:false,imported:true,
+          legs:od.legs.map(l=>{const fo=l.fromO&&l.fromO.name?l.fromO:{name:l.from},to=l.toO&&l.toO.name?l.toO:{name:l.to};return {order:l.order,uppdrag:l.uppdrag,load:l.load,antal:l.antal,mangd:l.mangd,note:l.note||"",from:fo,to:to}})}}}
+    S.pl.drafts[k]=d||imp||(base?JSON.parse(JSON.stringify(base)):{date:S.pl.date,car:S.pl.car,carName:planCar().name,driver:planCar().driver||"",trailer:planCar().trailer||"",reg:planCar().reg||"",legs:[],next:1,sent:null,dirty:false})}
   return S.pl.drafts[k]}
 function plInfo(c){const k=c.dir+"|"+S.pl.date;let d=S.pl.drafts[k];if(!d){try{d=JSON.parse(store.get("pl:"+k)||"null")}catch(e){}}if(!d)d=S.plans[k];
   return {driver:(d&&d.driver)||c.driver||"",reg:(d&&d.reg)||c.reg||"",trailer:(d&&d.trailer)||c.trailer||"",n:d&&d.legs?d.legs.length:0,sent:!!(d&&d.sent)}}
