@@ -438,6 +438,20 @@ function sumData(car){
   O.fs=(H.fs||[]).filter(x=>want(x.car)&&inR(x.datum));
   return O;
 }
+function rapportRows(car,O){
+  const H=S.bundle.hist||{bilar:{}},names=Object.fromEntries(CARS),R={};
+  const fv=k=>k==="bil3"?"Lastbil, m släp, gas":"Lastbil, 1 cont, gas",br=k=>{const b=(H.bilar||{})[k]||{};return b.fuel?(/biogas/i.test(b.fuel)?"Biogas-100, kg":b.fuel):"–"};
+  (O.fs||[]).filter(x=>x.typ==="lev").forEach(x=>{const k=x.till+"|"+x.car,r=R[k]||(R[k]={st:x.till,car:x.car,fran:{},n:0,km:0,kn:0,retN:0,retKm:0,retK:0});r.fran[x.fran]=1;r.n+=x.antal;if(x.km!=null){r.km+=x.km;r.kn+=x.antal}});
+  (O.fs||[]).filter(x=>x.typ==="ret").forEach(x=>{const k=x.fran+"|"+x.car;if(R[k]&&x.km!=null){R[k].retKm+=x.km;R[k].retK+=x.antal}});
+  return Object.values(R).sort((a,b)=>a.st<b.st?-1:a.st>b.st?1:a.car<b.car?-1:1).map(r=>({st:r.st,fordon:fv(r.car)+" ("+(names[r.car]||r.car)+")",bransle:br(r.car),fran:Object.keys(r.fran).join(", "),antal:r.n,m3:r.n*14,avst:r.kn?Math.round(r.km/r.kn*10)/10:null,retur:r.retK?Math.round(r.retKm/r.retK*10)/10:null}));
+}
+function rapportBlock(car,O){
+  const rows=rapportRows(car,O);if(!rows.length)return "";
+  const f=v=>v==null?"–":(Math.round(v*10)/10).toLocaleString("sv-SE");
+  return '<div class="card" style="display:flex;flex-direction:column;gap:10px"><h3 style="font-size:19px">Rapport till ekonomi (per station)</h3>'+
+   tbl(["Station","Fordon","Bränsle","Hämtas från","Antal flak","m³ (14/flak)","Avstånd, km","Retur, km"],rows.map(r=>[r.st,r.fordon,r.bransle,r.fran,String(r.antal),String(r.m3),f(r.avst),f(r.retur)]))+
+   '<p class="muted" style="margin:0;font-size:13.5px">Avstånd = snitt km per leverans enligt körd sträcka (GPS för Bil 1, dagens km fördelat på dagens transporter för Bil 3). Retur = snitt km per tomt flak åter.</p><div><button class="btn" data-csv="1">Ladda ner tabell (CSV)</button></div></div>'
+}
 function histBlock(car,O){
   const H=S.bundle.hist||{dagar:[],bilar:{}},names=Object.fromEntries(CARS);
   const MN=["januari","februari","mars","april","maj","juni","juli","augusti","september","oktober","november","december"];
@@ -454,7 +468,7 @@ function histBlock(car,O){
     const rows=[];Object.keys(lev).sort().forEach(f=>{const tot=Object.values(lev[f]).reduce((a,b)=>a+b,0);rows.push(["<b>"+f+"</b> (totalt)",String(tot),String(tot*14)]);Object.keys(lev[f]).sort((a,b)=>lev[f][b]-lev[f][a]).forEach(t=>rows.push(["  → "+t,String(lev[f][t]),String(lev[f][t]*14)]))});
     const rr=[];Object.keys(ret).sort().forEach(f=>Object.keys(ret[f]).forEach(t=>rr.push([f+" → "+t,String(ret[f][t])])));
     return sec("Gas per hämtställe och mottagare (fulla flak, enligt deklarationer)",tbl(["Hämtat från → levererat till","Flak","m³ (14/flak)"],rows.map(r=>[r[0].replace(/<\/?b>/g,""),r[1],r[2]]))+'<p class="muted" style="margin:0;font-size:13.5px">Historiska deklarationer anger nominellt 14 m³ per flak. Exakt mängd i kg redovisas från och med att chaufförerna anger tryck vid Lastad.</p>')+sec("Tomma flak åter (returer)",tbl(["Från station → till","Flak"],rr))};
-  return gasBlock()+(keys.length?sec("Kilometer",tbl(["Månad","Bil","Dagar","Km","Kundstopp","Km/stopp","Släp"],keys.map(k=>{const [ym,c]=k.split("|"),m=M[k];return [MN[+ym.slice(5)-1]+" "+ym.slice(0,4),names[c]||c,String(m.dagar),n1(m.km),m.r?String(m.kund):"–",m.r&&m.kund?n1(m.km/m.kund):"–",String(m.slap)]}),["Totalt","",String(tot.dagar),n1(tot.km),tot.r?String(tot.kund):"–",tot.r&&tot.kund?n1(tot.km/tot.kund):"–",String(tot.slap)]))
+  return rapportBlock(car,O)+gasBlock()+(keys.length?sec("Kilometer",tbl(["Månad","Bil","Dagar","Km","Kundstopp","Km/stopp","Släp"],keys.map(k=>{const [ym,c]=k.split("|"),m=M[k];return [MN[+ym.slice(5)-1]+" "+ym.slice(0,4),names[c]||c,String(m.dagar),n1(m.km),m.r?String(m.kund):"–",m.r&&m.kund?n1(m.km/m.kund):"–",String(m.slap)]}),["Totalt","",String(tot.dagar),n1(tot.km),tot.r?String(tot.kund):"–",tot.r&&tot.kund?n1(tot.km/tot.kund):"–",String(tot.slap)]))
      :sec("Kilometer",'<p class="muted" style="margin:0">Ingen km-data för vald period.</p>'))+
     sec("Bil och bränsle",tbl(["Bil","Reg.nr","Bränsle","Släp"],fuel))+
     (perDag.length?sec("Körda dagar (milrapport)",tbl(["Datum","Bil","Förare","Km","Släp"],perDag)):"");
@@ -535,6 +549,11 @@ document.addEventListener("click",async e=>{
   const t=e.target.closest("button");if(!t||t.getAttribute("type")==="submit")return;
   if(t.id==="switch"){logout("");return}
   if(t.id==="refresh"){t.disabled=true;await refresh();t.disabled=false;toast(S.offline?"Ingen kontakt – visar senast hämtade.":"Uppdaterad.");return}
+  if(t.dataset.csv){const O=sumData(S.sumTab||"tot"),rows=rapportRows(S.sumTab||"tot",O);const q=v=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"';
+    const csv="﻿"+[["Station","Fordon","Bränsle","Hämtas från","Antal flak","m3 (14 per flak)","Avstånd km","Retur km"]].concat(rows.map(r=>[r.st,r.fordon,r.bransle,r.fran,r.antal,r.m3,r.avst,r.retur])).map(r=>r.map(q).join(";")).join("\n");
+    const blob=new Blob([csv],{type:"text/csv"}),f=new File([blob],"rapport-ekonomi.csv",{type:"text/csv"});
+    if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:"rapport-ekonomi.csv"});return}catch(e){if(e&&e.name==="AbortError")return}}
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="rapport-ekonomi.csv";document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);return}
   if(t.dataset.sumtab){S.sumTab=t.dataset.sumtab;render();window.scrollTo(0,0);return}
   if(t.dataset.range!==undefined){const [a,b]=t.dataset.range.split("|");S.from=a;S.to=b;render();return}
   if(t.dataset.view){S.view=t.dataset.view;render();await afterLoad();render();return}
