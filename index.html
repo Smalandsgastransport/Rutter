@@ -260,6 +260,7 @@ async function loadBundle(){
 async function afterLoad(){
   if(!S.bundle)return;
   if(window.ARKIV)return akLoad();
+  ensurePush();
   if(S.bundle.role==='admin'){await loadPlansAdmin();await loadNotes();await loadPauser();await loadSwaps();await loadLedig();await loadFel();await loadHamt();await loadStat();if(S.view==='ark')arLoad().then(()=>render());
     const ds=[...new Set([today(),iso(new Date(Date.now()+864e5)),S.pl.date||today(),S.date].filter(Boolean))];
     await Promise.all((S.bundle.planCars||[]).filter(c=>c.dir).map(async c=>{for(const d of (S.view==='paus'?[...new Set(ds.concat(pausDays()))]:ds)){await ghList(c.dir,d);await fetchNy(c.dir,d)}}))}
@@ -548,7 +549,7 @@ async function ghPlanGet(dir,name){const st=S.bundle.status;
 async function ghPlanPut(dir,date,obj){const st=S.bundle.status;if(!st)throw new Error("status");
   const path="plan/"+dir+"/"+date+".json";let sha=null;
   try{const r=await fetch(GH+st.repo+"/contents/"+path+"?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});if(r.ok)sha=(await r.json()).sha}catch(e){}
-  const body={message:"Plan "+date,content:b64(await sealPlan(obj))};if(sha)body.sha=sha;
+  const body={message:pm(dir),content:b64(await sealPlan(obj))};if(sha)body.sha=sha;
   const r=await fetch(GH+st.repo+"/contents/"+path,{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify(body)});if(!r.ok)throw new Error("put "+r.status);
   const j=await r.json();S.planSha[dir+"|"+date]=j.content&&j.content.sha;return true}
 const planDate=n=>String(n).replace(/\.json$/,"");
@@ -654,7 +655,7 @@ async function loadNotes(){
   catch(e){const c=store.get("notes");if(c&&!S.notes.length){try{S.notes=await openPlan(unb64(c))}catch(x){}}}
 }
 async function saveNotes(){const st=S.bundle.status;
-  const body={message:"Meddelanden",content:b64(await sealPlan(S.notes))};if(S.notesSha)body.sha=S.notesSha;
+  const body={message:pm("all"),content:b64(await sealPlan(S.notes))};if(S.notesSha)body.sha=S.notesSha;
   const r=await fetch(GH+st.repo+"/contents/plan/_notes/all.json",{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify(body)});if(!r.ok)throw new Error("put");S.notesSha=(await r.json()).content.sha}
 function notesFor(carId,date){return (S.notes||[]).filter(n=>n.to>=date&&n.from<=date&&(n.cars.indexOf("all")>=0||n.cars.indexOf(carId)>=0))}
 function notisAll(dir,date){
@@ -666,7 +667,7 @@ const KIND={tidigare:"Behöver sluta tidigare",sen:"Försenad",fel:"Fel på bile
 function notisReads(dir,date){const m=new Map();(S.server[dir+"|"+date]||[]).forEach(n=>{const p=parseName(n);if(!p||p.type!=="notislast")return;const d=S.nyData[n];if(d&&d.ref)m.set(d.ref,{ts:p.ts,svar:d.svar||""})});return m}
 const notisUnread=(dir,date)=>{const rd=notisReads(dir,date);return notisAll(dir,date).filter(n=>!rd.has(n.name))};
 async function notisMark(dir,date,ref,svar){const st=S.bundle.status,name=Date.now()+"_dag_notislast.json",data={typ:"notislast",ref,svar:svar||""};
-  const r=await fetch(GH+st.repo+"/contents/status/"+date+"/"+dir+"/"+name,{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify({message:"Läst "+ref,content:btoa(unescape(encodeURIComponent(JSON.stringify(data))))})});
+  const r=await fetch(GH+st.repo+"/contents/status/"+date+"/"+dir+"/"+name,{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify({message:pm(dir),content:btoa(unescape(encodeURIComponent(JSON.stringify(data))))})});
   if(!r.ok)throw new Error("put");(S.server[dir+"|"+date]=S.server[dir+"|"+date]||[]).push(name);S.nyData[name]=data}
 function notisCard(date){
   const rows=[];(S.bundle.planCars||[]).forEach(c=>notisAll(c.dir,date).forEach(n=>rows.push({c,n})));rows.sort((a,b)=>a.n.ts-b.n.ts);
@@ -813,7 +814,7 @@ const FA={snart:["Bör åtgärdas snart","p-warn"],kan:["Kan köra som vanligt",
 const FO=["Motor","Bromsar","Däck / hjul","Elsystem / lampor","Gasutrustning / ventiler","Lastsystem / koppling","Hytt","Annat"];
 const FS={ny:["Ny","p-warn"],pagar:["Pågår","p-type"],klar:["Klar","p-full"]};
 S.fel=[];S.felSha={};S.felImg={};
-async function felPut(path,obj,sha){const st=S.bundle.status,body={message:"Fel",content:b64(await sealPlan(obj))};if(sha)body.sha=sha;
+async function felPut(path,obj,sha,dir){const st=S.bundle.status,body={message:pm(dir),content:b64(await sealPlan(obj))};if(sha)body.sha=sha;
   const r=await fetch(GH+st.repo+"/contents/"+path,{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify(body)});if(!r.ok)throw new Error("put "+r.status);return (await r.json()).content.sha}
 async function loadFel(){
   if(!S.bundle||!S.bundle.planKey||!S.bundle.status)return;const st=S.bundle.status,admin=S.bundle.role==="admin";
@@ -889,7 +890,7 @@ document.addEventListener("click",async e=>{const t=e.target.closest("[data-fv],
   if(a==="st"||a==="note"){const x=S.fel.find(y=>y.id===t.dataset.id);if(!x)return;const inp=document.getElementById("fr-"+x.id),text=(inp&&inp.value||"").trim();const ns=a==="st"?t.dataset.k:x.status;
     if(a==="note"&&!text){toast("Skriv ett svar först.");return}
     t.disabled=true;try{const d=Object.assign({},x);delete d._file;delete d._sha;d.status=ns;d.logg=(x.logg||[]).concat([{ts:Date.now(),status:ns,text}]);
-      await felPut("plan/_fel/"+x._file,d,x._sha);toast("Sparat.");await loadFel()}catch(err){toast("Kunde inte spara. Försök igen.");await loadFel()}render()}
+      await felPut("plan/_fel/"+x._file,d,x._sha,x.dir);toast("Sparat.");await loadFel()}catch(err){toast("Kunde inte spara. Försök igen.");await loadFel()}render()}
 });
 
 /* ---------- Hämtningsförfrågan (t.ex. gas i Målilla) ---------- */
@@ -899,7 +900,7 @@ async function loadHamt(){
   try{const st=S.bundle.status,r=await fetch(GH+st.repo+"/contents/plan/_hamt/all.json?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});
     if(r.status===404){S.hm=[];S.hmSha=null;return}if(!r.ok)throw 0;const j=await r.json();S.hmSha=j.sha;S.hm=await openPlan(unb64(j.content.replace(/\n/g,"")));store.set("hamt",j.content.replace(/\n/g,""))}
   catch(e){const c=store.get("hamt");if(c&&!S.hm.length){try{S.hm=await openPlan(unb64(c))}catch(x){}}}}
-async function saveHamt(){const st=S.bundle.status,body={message:"Hämtning",content:b64(await sealPlan(S.hm))};if(S.hmSha)body.sha=S.hmSha;
+async function saveHamt(){const st=S.bundle.status,body={message:pm(S.pushTo),content:b64(await sealPlan(S.hm))};if(S.hmSha)body.sha=S.hmSha;
   const r=await fetch(GH+st.repo+"/contents/plan/_hamt/all.json",{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify(body)});if(!r.ok)throw new Error("put "+r.status);S.hmSha=(await r.json()).content.sha}
 async function hmMutate(fn,msg){for(let i=0;i<2;i++){try{await loadHamt();fn();await saveHamt();toast(msg);render();return true}catch(e){}}toast("Kunde inte spara. Försök igen.");await loadHamt();render();return false}
 const HST={ny:["Väntar på svar från kontoret","p-warn"],motforslag:["Kontoret föreslår annan tid","p-warn"],godkand:["Godkänd","p-full"],nekad:["Nekad","p-warn"]};
@@ -929,7 +930,7 @@ function renderHamt(){
   if(mf.length)h+='<div class="card" style="margin-top:14px"><h3>Väntar på förarens svar</h3>'+mf.map(x=>'<div class="nrow"><b>'+esc(x.namn||x.carName)+'</b><span>Önskade '+esc(hmWhen(x))+' · föreslog '+esc(hmWhen(x.mf))+'</span></div>').join("")+'</div>';
   h+='<div class="card" style="margin-top:14px"><h3>Besvarade</h3>'+(rest.length?rest.map(x=>{const t=HST[x.status];return '<div class="nrow"><b>'+esc(x.namn||x.carName)+'</b><span>'+esc(x.plats)+' · '+esc(hmWhen(x))+'</span><span class="pill '+t[1]+'">'+t[0]+'</span><button class="btn link" data-hm="del" data-id="'+esc(x.id)+'">Ta bort</button></div>'}).join(""):'<p class="muted" style="margin:6px 0 0">Inget än.</p>')+'</div>';
   return h}
-document.addEventListener("click",async e=>{const t=e.target.closest("[data-hm]");if(!t||!S.bundle)return;const a=t.dataset.hm,id=t.dataset.id,g=i=>{const el=document.getElementById(i);return el?el.value:""};
+document.addEventListener("click",async e=>{const t=e.target.closest("[data-hm]");if(!t||!S.bundle)return;const a=t.dataset.hm,id=t.dataset.id;S.pushTo=((S.hm.find(y=>y.id===id))||{}).dir;const g=i=>{const el=document.getElementById(i);return el?el.value:""};
   const car=S.bundle.car||{},who=S.bundle.role==="admin"?"Kontoret":(car.driver||"Föraren").split(" ")[0];
   if(a==="open"){S.hf={plats:"Målilla",date:iso(new Date(Date.now()+864e5)),tid:"07:00",text:""};render();return}
   if(a==="cancel"){S.hf=null;render();return}
@@ -946,6 +947,24 @@ document.addEventListener("click",async e=>{const t=e.target.closest("[data-hm]"
   if(a==="re"){const d=g("hrd-"+id),tm=g("hrt-"+id);if(!d){toast("Välj ett datum.");return}await mut(x=>{x.date=d;x.tid=tm;x.status="ny";x.mf=null;x.svar="";x.hist.push({ts:Date.now(),vem:who,akt:"föreslår istället",date:d,tid:tm})});return}
 });
 
+/* ---------- Push-aviseringar (skickas av GitHub när något sparas) ---------- */
+const PUSH_KEY="BIfBO5M1Nzs7pMx6WSa9YUpJZYO2QvCn3POMUCaVwUTwmR_tPN7ehbKSeajWbg1YgezS0B80c-IFjaKLrBDcErI";
+const pm=dir=>S.bundle&&S.bundle.role==="admin"?"K:"+(dir||"all"):"F:";
+const u8k=b=>{const p="=".repeat((4-b.length%4)%4),r=atob((b+p).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(r,c=>c.charCodeAt(0))};
+async function ensurePush(){
+  try{if(!S.bundle||!S.bundle.status||!("PushManager" in window)||!("Notification" in window)||Notification.permission!=="granted"||!navigator.serviceWorker)return;
+    const reg=await navigator.serviceWorker.ready;let sub=await reg.pushManager.getSubscription();
+    if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8k(PUSH_KEY)});
+    const k="pushreg:"+sub.endpoint.slice(-30),last=+store.get(k)||0;if(Date.now()-last<6048e5)return;
+    const st=S.bundle.status,name=S.bundle.role==="admin"?"_admin":S.bundle.dir,url=GH+st.repo+"/contents/push/"+name+".json",me={endpoint:sub.endpoint,keys:sub.toJSON().keys,t:Date.now()};
+    for(let i=0;i<3;i++){let arr=[],sha=null;
+      const g=await fetch(url+"?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});
+      if(g.ok){const j=await g.json();sha=j.sha;try{arr=JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g,"")))))}catch(e){arr=[]}}else if(g.status!==404)return;
+      arr=arr.filter(x=>x.endpoint!==me.endpoint).concat([me]).slice(-6);
+      const body={message:"F:",content:btoa(unescape(encodeURIComponent(JSON.stringify(arr))))};if(sha)body.sha=sha;
+      const r=await fetch(url,{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify(body)});if(r.ok){store.set(k,String(Date.now()));return}}
+  }catch(e){}}
+
 /* ---------- Ledighetsansökan ---------- */
 const LT={semester:"Semester",ledig:"Ledig dag",foraldra:"Föräldraledighet",vab:"VAB",annat:"Annat"};
 S.led=[];S.ledSha=null;S.lv={form:null,m:null};
@@ -956,7 +975,7 @@ async function loadLedig(){
   catch(e){const c=store.get("ledig");if(c&&!S.led.length){try{S.led=await openPlan(unb64(c))}catch(x){}}}
 }
 async function saveLedig(){const st=S.bundle.status;
-  const body={message:"Ledighet",content:b64(await sealPlan(S.led))};if(S.ledSha)body.sha=S.ledSha;
+  const body={message:pm(S.pushTo),content:b64(await sealPlan(S.led))};if(S.ledSha)body.sha=S.ledSha;
   const r=await fetch(GH+st.repo+"/contents/plan/_ledig/all.json",{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify(body)});if(!r.ok)throw new Error("put "+r.status);S.ledSha=(await r.json()).content.sha}
 async function ledMutate(fn,msg){
   for(let i=0;i<2;i++){try{await loadLedig();fn();await saveLedig();toast(msg);render();return true}catch(e){}}
@@ -1013,7 +1032,7 @@ function renderLed(){
   h+='<div class="card" style="margin-top:14px"><h3>Besvarade</h3>'+(done.length?done.map(x=>{const t=LST[x.status];return '<div class="nrow"><b>'+esc(x.namn||x.carName)+'</b><span>'+esc(ledSpan(x))+' · '+esc(LT[x.typ]||x.typ)+'</span><span class="pill '+t[1]+'">'+t[0]+'</span>'+(x.status==="godkand"?'<button class="btn link" data-lv="ics" data-id="'+esc(x.id)+'">Kalenderfil</button>':'')+'<button class="btn link" data-lv="del" data-id="'+esc(x.id)+'">Ta bort</button></div>'}).join(""):'<p class="muted" style="margin:6px 0 0">Inget än.</p>')+'</div>';
   return h}
 document.addEventListener("click",async e=>{
-  const t=e.target.closest("[data-lv]");if(!t||!S.bundle)return;const a=t.dataset.lv,id=t.dataset.id;
+  const t=e.target.closest("[data-lv]");if(!t||!S.bundle)return;const a=t.dataset.lv,id=t.dataset.id;S.pushTo=((S.led.find(y=>y.id===id))||{}).dir;
   if(a==="open"){S.lv.form={typ:"semester",from:iso(new Date(Date.now()+864e5)),to:iso(new Date(Date.now()+864e5)),text:""};render();return}
   if(a==="cancel"){S.lv.form=null;render();return}
   if(a==="typ"){readLv();S.lv.form.typ=t.dataset.k;render();return}
@@ -1097,7 +1116,7 @@ async function loadSwaps(){
   catch(e){const c=store.get("byten");if(c&&!S.swaps.length){try{S.swaps=await openPlan(unb64(c))}catch(x){}}}
 }
 async function saveSwaps(){const st=S.bundle.status;
-  const body={message:"Byten",content:b64(await sealPlan(S.swaps))};if(S.swSha)body.sha=S.swSha;
+  const body={message:pm("all"),content:b64(await sealPlan(S.swaps))};if(S.swSha)body.sha=S.swSha;
   const r=await fetch(GH+st.repo+"/contents/plan/_byten/all.json",{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify(body)});if(!r.ok)throw new Error("put "+r.status);S.swSha=(await r.json()).content.sha}
 async function swMutate(fn,msg){
   for(let i=0;i<2;i++){try{await loadSwaps();fn();await savePauserSafe();toast(msg);render();return true}catch(e){}}
@@ -1278,6 +1297,7 @@ function renderAdmin(){
   {const D=S.date||today(),cs=B.cars.filter(c=>c.days[D]);let nL=0,nU=0,nG=0;cs.forEach(c=>{const st=statesFor(c.dir,D);if(st.get("dag|godkand"))nG++;allLegs(c.dir,D,c.days[D].legs.map(l=>Object.assign({},l,{from:{name:l.from},to:{name:l.to}}))).filter(l=>!l.deleted).forEach(l=>{nL++;if(st.get(l.order+"|lossad"))nU++})});
    const nn=(B.planCars||[]).reduce((a,c)=>a+notisUnread(c.dir,D).length,0);
    h+='<div class="tiles"><div class="tile"><span class="k">Bilar utskickade</span><span class="v">'+cs.length+' <small>av '+((B.planCars||[]).length||3)+'</small></span></div><div class="tile"><span class="k">Godkända</span><span class="v">'+nG+' <small>av '+cs.length+'</small></span></div><div class="tile"><span class="k">Lossade</span><span class="v">'+nU+' <small>av '+nL+'</small></span></div><div class="tile'+(nn?' hot':'')+'"><span class="k">Aviseringar</span><span class="v">'+nn+'</span></div></div>'+notisCard(D)+swapAdminCard()}
+  if("Notification" in window&&Notification.permission==="default")h+='<div class="notice" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>Få en avisering när en förare skickar något till kontoret.</span><button class="btn small" data-al="perm">Slå på aviseringar</button></div>';
   if(!B.status)h+='<div class="notice warn">Rapporteringen är inte inkopplad än. Godkänn, Lastad och Lossad syns här när den är klar.</div>';
   if(ds.length)h+='<div class="chips">'+ds.map(d=>'<button class="chip" data-date="'+d+'"'+(d===S.date?' aria-current="date"':'')+'>'+esc(dayLabel(d))+'</button>').join("")+'</div>';
   const cars=B.cars,DD=S.date||today();if(!S.date)S.date=DD;
@@ -1466,7 +1486,7 @@ function alertsHtml(){
 document.addEventListener("click",async e=>{const t=e.target.closest("[data-al]");if(!t)return;
   if(t.dataset.al==="chg"){store.set(t.dataset.k,t.dataset.u);render();return}
   if(t.dataset.al==="ok"){const s=alSeen();topAlerts().forEach(a=>s.add(a.key));store.set(seenKey(),JSON.stringify([...s].slice(-300)));render();return}
-  if(t.dataset.al==="perm"){try{await Notification.requestPermission()}catch(x){}render()}});
+  if(t.dataset.al==="perm"){try{await Notification.requestPermission()}catch(x){}ensurePush();render()}});
 function notifyDriver(title,body,tag){
   try{toast(title+(body?": "+body:""))}catch(e){}
   try{if(navigator.vibrate)navigator.vibrate([200,100,200])}catch(e){}
