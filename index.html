@@ -215,10 +215,10 @@ async function loadBundle(){
 }
 async function afterLoad(){
   if(!S.bundle)return;
-  if(S.bundle.role==='admin'){await loadPlansAdmin();await loadNotes();
+  if(S.bundle.role==='admin'){await loadPlansAdmin();await loadNotes();await loadPauser();
     const ds=[...new Set([today(),iso(new Date(Date.now()+864e5)),S.pl.date||today(),S.date].filter(Boolean))];
-    await Promise.all((S.bundle.planCars||[]).filter(c=>c.dir).map(async c=>{for(const d of ds){await ghList(c.dir,d);await fetchNy(c.dir,d)}}))}
-  else if(S.bundle.role==='driver'){await loadPlansDriver();await loadNotes()}
+    await Promise.all((S.bundle.planCars||[]).filter(c=>c.dir).map(async c=>{for(const d of (S.view==='paus'?[...new Set(ds.concat(pausDays()))]:ds)){await ghList(c.dir,d);await fetchNy(c.dir,d)}}))}
+  else if(S.bundle.role==='driver'){await loadPlansDriver();await loadNotes();await loadPauser();for(const d of [today(),iso(new Date(Date.now()-864e5))]){await ghList(S.bundle.dir,d);await fetchNy(S.bundle.dir,d)}}
   if(isOv()){const all=S.bundle.role==="ekonomi"||S.view==="sum";await Promise.all(S.bundle.cars.map(async c=>{for(const d of (all?Object.keys(c.days):(S.date?[S.date]:[]))){await ghList(c.dir,d);await fetchNy(c.dir,d)}}));return}
   await sync();if(S.date){await ghList(S.bundle.dir,S.date);await fetchNy(S.bundle.dir,S.date)}
 }
@@ -361,7 +361,7 @@ function nyEvents(dir,date){
   return out.sort((a,b)=>a.ts-b.ts);
 }
 async function fetchNy(dir,date){const st=S.bundle.status;if(!st)return;
-  for(const n of (S.server[dir+"|"+date]||[])){const p=parseName(n);if(!p||(p.type!=="ny"&&p.type!=="lastad"&&p.type!=="notis")||S.nyData[n])continue;
+  for(const n of (S.server[dir+"|"+date]||[])){const p=parseName(n);if(!p||(p.type!=="ny"&&p.type!=="lastad"&&p.type!=="notis"&&p.type!=="paus"&&p.type!=="pausslut")||S.nyData[n])continue;
     try{const r=await fetch(GH+st.repo+"/contents/status/"+date+"/"+dir+"/"+n,{headers:ghHeaders(st),cache:"no-store"});if(!r.ok)continue;const j=await r.json();S.nyData[n]=JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g,"")))))}catch(e){}}}
 /* ---------- Flaknummer vid Lastad ---------- */
 function kgGas(bar,L){const T=288.15,R=8.314462,Tc=190.564,Pc=45.99e5,w=0.0115,M=16.043e-3,P=(bar+1.01325)*1e5;
@@ -638,6 +638,63 @@ function notisForm(){
     '<label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Klockslag (valfritt)<input id="ntTid" type="time" value="'+esc(T.tid||"")+'" '+inp+'></label><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Meddelande<input id="ntText" value="'+esc(T.text||"")+'" '+inp+'></label>'+(T.err?'<div class="notice warn">'+esc(T.err)+'</div>':'')+
     '<div class="acts"><button class="btn go" data-ntsend="1">Skicka</button><button class="btn" data-ntcancel="1">Avbryt</button></div></div>'}
 function readNt(){const g=id=>document.getElementById(id);if(S.nt){if(g("ntTid"))S.nt.tid=g("ntTid").value;if(g("ntText"))S.nt.text=g("ntText").value}}
+
+/* ---------- Pauser / privata körningar ---------- */
+const PK={privat:"Privat körning",rast:"Rast",annat:"Annat"};
+S.paus=[];S.pausSha=null;S.pf=null;
+const pausDays=()=>{const a=[];for(let i=0;i<14;i++)a.push(iso(new Date(Date.now()-i*864e5)));return a};
+async function loadPauser(){
+  if(!S.bundle||!S.bundle.planKey||!S.bundle.status)return;
+  try{const st=S.bundle.status,r=await fetch(GH+st.repo+"/contents/plan/_pauser/all.json?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});
+    if(r.status===404){S.paus=[];S.pausSha=null;return}if(!r.ok)throw 0;const j=await r.json();S.pausSha=j.sha;S.paus=await openPlan(unb64(j.content.replace(/\n/g,"")));store.set("pauser",j.content.replace(/\n/g,""))}
+  catch(e){const c=store.get("pauser");if(c&&!S.paus.length){try{S.paus=await openPlan(unb64(c))}catch(x){}}}
+}
+async function savePauser(){const st=S.bundle.status;
+  const body={message:"Pauser",content:b64(await sealPlan(S.paus))};if(S.pausSha)body.sha=S.pausSha;
+  const r=await fetch(GH+st.repo+"/contents/plan/_pauser/all.json",{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify(body)});if(!r.ok)throw new Error("put");S.pausSha=(await r.json()).content.sha}
+function pausRaw(dir,date){
+  const ev=[];
+  if(S.bundle.role==="driver"&&dir===S.bundle.dir)queue().filter(e=>e.date===date&&e.data&&(e.data.typ==="paus"||e.data.typ==="pausslut")).forEach(e=>ev.push({ts:parseName(e.name).ts,name:e.name,d:e.data}));
+  (S.server[dir+"|"+date]||[]).forEach(n=>{const p=parseName(n);if(!p||(p.type!=="paus"&&p.type!=="pausslut")||ev.some(x=>x.name===n))return;const d=S.nyData[n];if(d)ev.push({ts:p.ts,name:n,d})});
+  const m=new Map();
+  ev.sort((a,b)=>a.ts-b.ts).forEach(e=>{const d=e.d;let o=m.get(d.id);if(!o){o={id:d.id,dir,date,start:null,slut:null,kind:"privat",note:""};m.set(d.id,o)}
+    if(d.typ==="paus"){o.start=d.start;o.kind=d.kind||"privat";o.note=d.note||""}else o.slut=d.slut});
+  return [...m.values()].filter(o=>o.start)}
+function pausesFor(dir,date){
+  const ov=S.paus||[];
+  const out=pausRaw(dir,date).map(o=>{const x=ov.find(v=>v.id===o.id);return x?Object.assign({},o,x):o});
+  ov.filter(v=>v.manual&&v.dir===dir&&v.date===date).forEach(v=>out.push(v));
+  return out.filter(o=>!o.deleted).sort((a,b)=>a.start<b.start?-1:1)}
+const pdur=o=>{if(!o.slut)return "pågår";const m=Math.max(0,Math.round((new Date(o.slut)-new Date(o.start))/6e4));return m>=60?Math.floor(m/60)+" h "+(m%60)+" min":m+" min"};
+const toLocalDT=iso=>{if(!iso)return "";const d=new Date(iso),p=n=>String(n).padStart(2,"0");return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+"T"+p(d.getHours())+":"+p(d.getMinutes())};
+const fromLocalDT=v=>v?new Date(v).toISOString():null;
+function openPause(){const dir=S.bundle.dir;for(const d of [today(),iso(new Date(Date.now()-864e5))]){const o=pausesFor(dir,d).find(x=>!x.slut);if(o)return o}return null}
+function pausCard(){
+  const o=openPause();
+  if(o)return '<div class="notice warn" style="display:flex;flex-direction:column;gap:10px;padding:14px 16px"><b style="font-size:18px">'+esc(PK[o.kind]||"Paus")+' pågår sedan '+esc(hhmm(o.start))+'</b><span>Du är pausad från Småländska Bränslen. Tryck när du är tillbaka i jobb.</span><button class="btn go big" data-pend="'+esc(o.id)+'" data-pday="'+esc(o.date)+'">Avsluta – tillbaka i jobb</button></div>';
+  if(!S.pf)return '<button class="btn" data-popen="1" style="width:100%">Pausa – privat körning / rast</button>';
+  return '<div class="card" style="display:flex;flex-direction:column;gap:10px"><b>Pausa körningen</b><span class="muted" style="font-size:14px">Tiden sparas och kontoret ser den. Glömmer du trycka av kan kontoret rätta det.</span><div class="chips">'+Object.keys(PK).map(k=>'<button class="chip" data-pstart="'+k+'">'+PK[k]+'</button>').join("")+'</div><div><button class="btn" data-pcancel="1">Avbryt</button></div></div>'}
+async function pausQueue(type,date,extra){
+  const now=new Date(),name=now.getTime()+"_dag_"+type+".json",c=S.bundle.car||{};
+  const q=queue();q.push({name,date,sent:false,data:Object.assign({typ:type,order:"dag",datum:date,tid:now.toISOString(),bil:c.name||"",forare:c.driver||""},extra)});saveQueue(q);
+  render();await sync();render()}
+function pausDt(o){return esc(dayLabel(o.date))}
+function renderPaus(){
+  const cars=S.bundle.planCars||[],days=pausDays();
+  const inp='style="font:inherit;font-size:16px;padding:8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg)"';
+  let h='<div class="pagehead"><h2>Pauser och privata körningar</h2><p class="muted">Förarna pausar och återupptar själva. Här kan du rätta tider, lägga till eller ta bort om någon glömt trycka av eller på.</p></div>';
+  const rows=[];
+  days.forEach(d=>cars.forEach(c=>pausesFor(c.dir,d).forEach(o=>rows.push({c,o}))));
+  rows.sort((a,b)=>a.o.start<b.o.start?1:-1);
+  h+='<div class="card"><h3>Registrerade pauser · 14 dagar</h3>'+(rows.length?rows.map(({c,o})=>'<div class="nrow" style="align-items:flex-end"><span class="pill '+(o.slut?'p-type':'p-warn')+'">'+esc(PK[o.kind]||"Paus")+'</span><b style="min-width:110px">'+esc(c.name)+(c.driver?' · '+esc(c.driver.split(" ")[0]):'')+'</b>'+
+    '<label class="fld">Start<input type="datetime-local" data-pe="'+esc(o.id)+'|start" value="'+esc(toLocalDT(o.start))+'" '+inp+'></label><label class="fld">Slut<input type="datetime-local" data-pe="'+esc(o.id)+'|slut" value="'+esc(toLocalDT(o.slut))+'" '+inp+'></label>'+
+    '<span class="muted" style="min-width:70px">'+esc(pdur(o))+'</span><button class="btn small" data-pesave="'+esc(o.id)+'" data-pdir="'+esc(c.dir)+'" data-pday="'+esc(o.date)+'">Spara</button><button class="btn link" data-pedel="'+esc(o.id)+'" data-pdir="'+esc(c.dir)+'" data-pday="'+esc(o.date)+'">Ta bort</button></div>').join(""):'<p class="muted" style="margin:6px 0 0">Inga pauser registrerade.</p>')+'</div>';
+  const F=S.pm||(S.pm={car:(cars[0]||{}).id,kind:"privat",start:"",slut:"",err:""});
+  h+='<div class="card" style="display:flex;flex-direction:column;gap:10px"><h3>Lägg till manuellt</h3><div class="chips">'+cars.map(c=>'<button class="chip" data-pmcar="'+c.id+'"'+(F.car===c.id?' aria-current="date"':'')+'>'+esc(c.name)+'</button>').join("")+'</div><div class="chips">'+Object.keys(PK).map(k=>'<button class="chip" data-pmkind="'+k+'"'+(F.kind===k?' aria-current="date"':'')+'>'+PK[k]+'</button>').join("")+'</div>'+
+    '<div style="display:flex;gap:12px;flex-wrap:wrap"><label class="fld">Start<input type="datetime-local" id="pmStart" value="'+esc(F.start)+'" '+inp+'></label><label class="fld">Slut<input type="datetime-local" id="pmSlut" value="'+esc(F.slut)+'" '+inp+'></label></div>'+(F.err?'<div class="notice warn">'+esc(F.err)+'</div>':'')+'<div><button class="btn primary" data-pmadd="1">Lägg till</button></div></div>';
+  return h}
+function readPm(){const g=id=>document.getElementById(id);if(S.pm){if(g("pmStart"))S.pm.start=g("pmStart").value;if(g("pmSlut"))S.pm.slut=g("pmSlut").value}}
+async function pausMutate(fn,okMsg){const keep=JSON.stringify(S.paus);try{fn();await savePauser();toast(okMsg)}catch(e){S.paus=JSON.parse(keep);toast("Kunde inte spara. Försök igen.")}render()}
 function isOv(){return !!S.bundle&&(S.bundle.role==="admin"||S.bundle.role==="ekonomi")}
 S.view="ov";
 function tbl(head,rows,foot){return '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:15px"><thead><tr>'+head.map((h,i)=>'<th style="text-align:'+(i?'right':'left')+';padding:6px 8px;border-bottom:2px solid var(--line);white-space:nowrap">'+esc(h)+'</th>').join("")+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map((c,i)=>'<td style="text-align:'+(i?'right':'left')+';padding:6px 8px;border-bottom:1px solid var(--line)">'+esc(c)+'</td>').join("")+'</tr>').join("")+(foot?'<tr>'+foot.map((c,i)=>'<td style="text-align:'+(i?'right':'left')+';padding:6px 8px;font-weight:700">'+esc(c)+'</td>').join("")+'</tr>':'')+'</tbody></table></div>'}
@@ -757,20 +814,20 @@ function render(){
     return}
   $("#topbar").hidden=false;$("#status").hidden=false;
   const car=(S.bundle&&S.bundle.car)||{name:""};
-  $("#sub").textContent=S.bundle&&S.bundle.role==="admin"?({ov:"Översikt",plan:"Planering",msg:"Meddelanden",sum:"Sammanställning"}[S.view]||"Översikt"):S.bundle&&S.bundle.role==="ekonomi"?"Sammanställning":(car.name||"");
+  $("#sub").textContent=S.bundle&&S.bundle.role==="admin"?({ov:"Översikt",plan:"Planering",msg:"Meddelanden",paus:"Pauser",sum:"Sammanställning"}[S.view]||"Översikt"):S.bundle&&S.bundle.role==="ekonomi"?"Sammanställning":(car.name||"");
   if(!S.bundle){M.innerHTML='<div class="card muted">'+(S.err?esc(S.err):'Hämtar rutten…')+'</div>';return}
   if(isOv()){
     if(S.bundle.role==="ekonomi"){M.innerHTML='<div class="content">'+renderSum()+'</div>';return}
     const cnt=(S.bundle.planCars||[]).reduce((a,c)=>a+notisAll(c.dir,today()).length+notisAll(c.dir,iso(new Date(Date.now()+864e5))).length,0);
-    const items=[["ov","Översikt",cnt],["plan","Planering",0],["msg","Meddelanden",0],["sum","Sammanställning",0]];
+    const items=[["ov","Översikt",cnt],["plan","Planering",0],["msg","Meddelanden",0],["paus","Pauser",0],["sum","Sammanställning",0]];
     const nav='<nav class="side"><div class="sidehd">Kontoret</div>'+items.map(([k,l,n])=>'<button data-view="'+k+'"'+(S.view===k?' aria-current="page"':'')+'><span>'+l+'</span>'+(n?'<i class="badge">'+n+'</i>':'')+'</button>').join("")+'</nav>';
-    M.innerHTML='<div class="shell">'+nav+'<div class="content">'+(S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():renderAdmin())+'</div></div>';return}
+    M.innerHTML='<div class="shell">'+nav+'<div class="content">'+(S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="paus"?renderPaus():renderAdmin())+'</div></div>';return}
   const ds=days();let h='';
   if(ds.length)h+='<div class="chips">'+ds.map(d=>'<button class="chip" data-date="'+d+'"'+(d===S.date?' aria-current="date"':'')+'>'+esc(dayLabel(d))+' <span>'+S.bundle.days[d].legs.length+' st</span></button>').join("")+'</div>';
   const r=route();
-  if(!r){M.innerHTML=h+'<div class="card" style="font-size:17px">Ingen rutt är utskickad till '+esc(car.name)+' just nu.</div><div style="margin-top:12px">'+newFormHtml(null)+'</div>';return}
+  if(!r){M.innerHTML=h+'<div class="card" style="font-size:17px">Ingen rutt är utskickad till '+esc(car.name)+' just nu.</div><div style="margin-top:12px">'+newFormHtml(null)+'</div><div style="margin-top:12px">'+pausCard()+'</div>';return}
   if(S.changed)h+='<div class="notice warn">Rutten har ändrats sedan du senast tittade.</div>';
-  h+=driverNotesHtml(r);
+  h+=driverNotesHtml(r);h+='<div>'+pausCard()+'</div>';
   const st=statesFor(S.bundle.dir,r.date),g=st.get("dag|godkand"),pc=pendingCount();
   h+='<div class="card" style="display:flex;flex-direction:column;gap:10px">'+(g?'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between"><span class="done'+(g.pending?' wait':'')+'">✓ Dagens ordrar godkända '+esc(hhmm(g.ts))+'</span><button class="btn link" data-undo="godkand" data-order="dag">Ångra</button></div>':'<button class="btn go big" data-act="godkand" data-order="dag">Godkänn dagens ordrar</button><p class="muted" style="margin:0;font-size:14.5px">Gå igenom transporterna nedan och godkänn innan du börjar köra.</p>')+
     (pc?'<p class="muted" style="margin:0;font-size:14px">'+pc+' tryck väntar på att skickas'+(S.bundle.status?' – skickas när nätet finns.':' – rapporteringen är inte inkopplad än.')+'</p>':'')+'</div>';
@@ -831,6 +888,20 @@ document.addEventListener("click",async e=>{
   if(t.dataset.ntopen){S.nt={kind:"tidigare",tid:"",text:"",err:""};render();return}
   if(t.dataset.ntcancel){S.nt=null;render();return}
   if(t.dataset.ntkind){readNt();S.nt.kind=t.dataset.ntkind;render();return}
+  if(t.dataset.popen){S.pf=true;render();return}
+  if(t.dataset.pcancel){S.pf=null;render();return}
+  if(t.dataset.pstart){S.pf=null;await pausQueue("paus",today(),{id:"p"+Date.now(),kind:t.dataset.pstart,start:new Date().toISOString()});toast("Pausen är startad.");return}
+  if(t.dataset.pend){await pausQueue("pausslut",t.dataset.pday,{id:t.dataset.pend,slut:new Date().toISOString()});toast("Du är tillbaka i jobb.");return}
+  if(t.dataset.pmcar){readPm();S.pm.car=t.dataset.pmcar;render();return}
+  if(t.dataset.pmkind){readPm();S.pm.kind=t.dataset.pmkind;render();return}
+  if(t.dataset.pmadd){readPm();const F=S.pm,c=(S.bundle.planCars||[]).find(x=>x.id===F.car);if(!c||!F.start){F.err="Välj bil och starttid.";render();return}
+    const st=fromLocalDT(F.start),sl=fromLocalDT(F.slut);if(sl&&sl<st){F.err="Sluttiden är före starttiden.";render();return}F.err="";
+    await pausMutate(()=>{S.paus.push({id:"m"+Date.now(),manual:true,dir:c.dir,date:iso(new Date(st)),start:st,slut:sl,kind:F.kind,note:""});F.start="";F.slut=""},"Pausen är tillagd.");return}
+  if(t.dataset.pesave){const id=t.dataset.pesave,g=f=>document.querySelector('[data-pe="'+id+'|'+f+'"]'),st=fromLocalDT(g("start").value),sl=fromLocalDT(g("slut").value);
+    if(!st||(sl&&sl<st)){toast("Kontrollera tiderna.");return}
+    await pausMutate(()=>{let o=S.paus.find(v=>v.id===id);if(!o){o={id};S.paus.push(o)}o.start=st;o.slut=sl;o.edited=new Date().toISOString()},"Sparat.");return}
+  if(t.dataset.pedel){const id=t.dataset.pedel;if(!confirm("Ta bort pausen?"))return;
+    await pausMutate(()=>{let o=S.paus.find(v=>v.id===id);if(o&&o.manual)S.paus=S.paus.filter(v=>v.id!==id);else{if(!o){o={id};S.paus.push(o)}o.deleted=true}},"Borttagen.");return}
   if(t.dataset.ntsend){readNt();const T=S.nt;if(!(T.text||"").trim()&&!T.tid){T.err="Skriv ett meddelande eller ange klockslag.";render();return}t.disabled=true;S.nt=null;await record("notis","dag",{kind:T.kind,tid:T.tid||"",text:(T.text||"").trim()});toast("Kontoret har fått ditt meddelande.");return}
   if(t.dataset.view){S.view=t.dataset.view;render();await afterLoad();render();return}
   if(t.dataset.date){S.date=t.dataset.date;render();window.scrollTo(0,0);await afterLoad();render();return}
