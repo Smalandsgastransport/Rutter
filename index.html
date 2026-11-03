@@ -113,6 +113,18 @@ html.wide #main{display:flex;flex-direction:column;gap:18px}
 .notis h3{margin-bottom:6px}
 .notice.msg{background:var(--blue-soft);color:var(--fg);border-left:4px solid var(--blue)}
 .p-warn{background:var(--warn-bg);color:var(--warn)}
+
+.cargrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:16px;align-items:start}
+.cargrid .ov-car{margin:0}
+.side{background:#0e3b1d;border-color:#0e3b1d;padding:14px 10px;gap:4px;box-shadow:0 6px 18px rgba(14,59,29,.18)}
+.side button{color:#d6ecdb;font-weight:500;padding:12px 14px}
+.side button:hover{background:rgba(255,255,255,.09)}
+.side button[aria-current=page]{background:#fff;color:#0e3b1d;font-weight:700}
+.side .badge{background:#e5483d;color:#fff}
+.side .sidehd{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#8fc09b;padding:6px 14px 8px}
+.pagehead{padding-bottom:4px;border-bottom:1px solid var(--line);margin-bottom:2px}
+.card{box-shadow:0 1px 2px rgba(0,0,0,.04),0 4px 14px rgba(0,0,0,.03)}
+.bar{height:8px;border-radius:99px}
 @media (max-width:900px){.shell{grid-template-columns:1fr}.side{position:static;flex-direction:row;overflow-x:auto}.side button{white-space:nowrap}}
 html.out,html.out body{background:var(--surface)}
 .btn.big{min-height:58px;font-size:18px;width:100%}
@@ -664,14 +676,14 @@ function renderAdmin(){
   if(ds.length)h+='<div class="chips">'+ds.map(d=>'<button class="chip" data-date="'+d+'"'+(d===S.date?' aria-current="date"':'')+'>'+esc(dayLabel(d))+'</button>').join("")+'</div>';
   const cars=B.cars.filter(c=>S.date&&c.days[S.date]);
   if(!cars.length)return h+'<div class="card">Inga utskickade rutter för den här dagen.</div>';
-  h+='<h2>'+esc(dayLabel(S.date))+'</h2>';
+  h+='<h2>'+esc(dayLabel(S.date))+'</h2><div class="cargrid">';
   cars.forEach(c=>{const d=c.days[S.date],st=statesFor(c.dir,S.date),g=st.get("dag|godkand");
     const legs=allLegs(c.dir,S.date,d.legs.map(l=>Object.assign({},l,{from:{name:l.from},to:{name:l.to}}))),act=legs.filter(l=>!l.deleted);
     const nU=act.filter(l=>st.get(l.order+"|lossad")).length,pct=act.length?Math.round(100*nU/act.length):0;
     h+='<div class="card ov-car"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline"><h3 style="font-size:20px">'+esc(c.name)+(d.driver?' · '+esc(d.driver.split(" ")[0]):'')+'</h3>'+(g?'<span class="done">✓ Godkänd '+esc(hhmm(g.ts))+'</span>':'<span class="done wait">Inte godkänd</span>')+'</div>'+
       '<div class="muted" style="font-size:14px">'+nU+' av '+act.length+' lossade</div><div class="bar"><i style="width:'+pct+'%"></i></div>'+
       legs.map(l=>{const L=st.get(l.order+"|lastad"),U=st.get(l.order+"|lossad");return '<div class="ov-row"'+(l.deleted?' style="opacity:.55"':'')+'><span class="n" style="font-size:17px">'+String(l.pos).padStart(2,"0")+'</span><span class="r"'+(l.deleted?' style="text-decoration:line-through"':'')+'>'+(l.isNew?'<span class="pill p-del">Ny</span> ':'')+esc(l.from.name)+' → '+esc(l.to.name)+' <span class="muted">('+esc((LOADS[l.load]||l.load).toLowerCase())+(l.antal>1?', antal '+l.antal:'')+')</span>'+(l.deleted?' <b>raderad '+esc(hhmm(l.deleted.ts))+'</b>':'')+'</span><span class="ov-st"><span class="tag'+(L?' on':'')+'">'+(L?'Lastad '+esc(hhmm(L.ts))+(l.flakInfo?' · Flak '+esc(l.flakInfo):''):'Ej lastad')+'</span><span class="tag'+(U?' on':'')+'">'+(U?'Lossad '+esc(hhmm(U.ts)):'Ej lossad')+'</span></span></div>'}).join("")+'</div>'});
-  return h+'<p class="muted" style="font-size:13.5px">Uppdateras varje minut.</p>';
+  return h+'</div><p class="muted" style="font-size:13.5px">Uppdateras varje minut.</p>';
 }
 function render(){
   readLast();readNt();if(S.bundle&&S.bundle.role==='admin'&&S.view==='msg')readMsg();if(S.bundle&&S.bundle.role==='admin'&&S.view==='plan')readPl();
@@ -692,13 +704,13 @@ function render(){
     return}
   $("#topbar").hidden=false;$("#status").hidden=false;
   const car=(S.bundle&&S.bundle.car)||{name:""};
-  $("#sub").textContent=S.bundle&&S.bundle.role==="admin"?"Översikt":S.bundle&&S.bundle.role==="ekonomi"?"Sammanställning":(car.name||"");
+  $("#sub").textContent=S.bundle&&S.bundle.role==="admin"?({ov:"Översikt",plan:"Planering",msg:"Meddelanden",sum:"Sammanställning"}[S.view]||"Översikt"):S.bundle&&S.bundle.role==="ekonomi"?"Sammanställning":(car.name||"");
   if(!S.bundle){M.innerHTML='<div class="card muted">'+(S.err?esc(S.err):'Hämtar rutten…')+'</div>';return}
   if(isOv()){
     if(S.bundle.role==="ekonomi"){M.innerHTML='<div class="content">'+renderSum()+'</div>';return}
     const cnt=(S.bundle.planCars||[]).reduce((a,c)=>a+notisAll(c.dir,today()).length+notisAll(c.dir,iso(new Date(Date.now()+864e5))).length,0);
     const items=[["ov","Översikt",cnt],["plan","Planering",0],["msg","Meddelanden",0],["sum","Sammanställning",0]];
-    const nav='<nav class="side">'+items.map(([k,l,n])=>'<button data-view="'+k+'"'+(S.view===k?' aria-current="page"':'')+'><span>'+l+'</span>'+(n?'<i class="badge">'+n+'</i>':'')+'</button>').join("")+'</nav>';
+    const nav='<nav class="side"><div class="sidehd">Kontoret</div>'+items.map(([k,l,n])=>'<button data-view="'+k+'"'+(S.view===k?' aria-current="page"':'')+'><span>'+l+'</span>'+(n?'<i class="badge">'+n+'</i>':'')+'</button>').join("")+'</nav>';
     M.innerHTML='<div class="shell">'+nav+'<div class="content">'+(S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():renderAdmin())+'</div></div>';return}
   const ds=days();let h='';
   if(ds.length)h+='<div class="chips">'+ds.map(d=>'<button class="chip" data-date="'+d+'"'+(d===S.date?' aria-current="date"':'')+'>'+esc(dayLabel(d))+' <span>'+S.bundle.days[d].legs.length+' st</span></button>').join("")+'</div>';
