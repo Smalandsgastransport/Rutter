@@ -407,6 +407,24 @@ function legActs(st,l,approved){
 function isOv(){return !!S.bundle&&(S.bundle.role==="admin"||S.bundle.role==="ekonomi")}
 S.view="ov";
 function tbl(head,rows,foot){return '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:15px"><thead><tr>'+head.map((h,i)=>'<th style="text-align:'+(i?'right':'left')+';padding:6px 8px;border-bottom:2px solid var(--line);white-space:nowrap">'+esc(h)+'</th>').join("")+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map((c,i)=>'<td style="text-align:'+(i?'right':'left')+';padding:6px 8px;border-bottom:1px solid var(--line)">'+esc(c)+'</td>').join("")+'</tr>').join("")+(foot?'<tr>'+foot.map((c,i)=>'<td style="text-align:'+(i?'right':'left')+';padding:6px 8px;font-weight:700">'+esc(c)+'</td>').join("")+'</tr>':'')+'</tbody></table></div>'}
+function histCards(){
+  const H=S.bundle.hist;
+  if(!H||!H.dagar||!H.dagar.length)return '<div class="card"><h3 style="font-size:19px">Kilometer och bränsle</h3><p class="muted" style="margin:6px 0 0">Ingen km-data inlagd än.</p></div>';
+  const M={},MN=["januari","februari","mars","april","maj","juni","juli","augusti","september","oktober","november","december"];
+  H.dagar.forEach(d=>{const k=d.datum.slice(0,7),m=M[k]||(M[k]={dagar:0,km:0,rut:0,kund:0,slap:0,slapKm:0});m.dagar++;m.km+=d.km||0;
+    d.rutter.forEach(r=>{m.rut++;m.kund+=r.kund||0;if(r.slap){m.slap++;m.slapKm+=r.km||0}})});
+  const n1=x=>(Math.round(x*10)/10).toLocaleString("sv-SE");
+  const rows=Object.keys(M).sort().map(k=>{const m=M[k];return [MN[+k.slice(5)-1]+" "+k.slice(0,4),String(m.dagar),n1(m.km),String(m.rut),String(m.kund),m.kund?n1(m.km/m.kund):"–",String(m.slap)]});
+  const tot=Object.values(M).reduce((a,m)=>({dagar:a.dagar+m.dagar,km:a.km+m.km,rut:a.rut+m.rut,kund:a.kund+m.kund,slap:a.slap+m.slap}),{dagar:0,km:0,rut:0,kund:0,slap:0});
+  const names={bil1:"Bil 1",bil2:"Bil 2",bil3:"Bil 3"};
+  const fuel=Object.keys(H.bilar||{}).map(k=>[names[k]||k,H.bilar[k].reg,H.bilar[k].fuel||"–"]);
+  const perDag=H.dagar.slice().sort((a,b)=>a.datum<b.datum?1:-1).map(d=>[d.datum,names[d.car]||d.car,(d.forare||"").split(" ")[0],n1(d.km),String(d.rutter.length),String(d.rutter.reduce((a,r)=>a+(r.kund||0),0)),String(d.rutter.filter(r=>r.slap).length)]);
+  const hKm={};H.dagar.forEach(d=>d.rutter.forEach(r=>r.stopp.forEach(x=>{const o=String(x.plats||"").replace(/\s*\(.*\)/,"");const e=hKm[o]||(hKm[o]={n:0,km:0});e.n++;e.km+=0})));
+  const sec=(t,h)=>'<div class="card" style="display:flex;flex-direction:column;gap:10px"><h3 style="font-size:19px">'+t+'</h3>'+h+'</div>';
+  return sec("Kilometer (från milrapporten)",tbl(["Månad","Dagar","Km","Rutter","Kundstopp","Km/stopp","Släp-rutter"],rows,["Totalt",String(tot.dagar),n1(tot.km),String(tot.rut),String(tot.kund),tot.kund?n1(tot.km/tot.kund):"–",String(tot.slap)]))+
+    sec("Bränsle",tbl(["Bil","Reg.nr","Bränsle"],fuel))+
+    sec("Körda dagar (historik)",tbl(["Datum","Bil","Förare","Km","Rutter","Kundstopp","Släp"],perDag));
+}
 function renderSum(){
   const B=S.bundle,days=[],byFrom={},byTo={},byCar={},T={legs:0,done:0,kg:0,rep:0,fullN:0,flak:0,trl:0},trl=[];
   const add=(o,k,kg,fl)=>{const x=o[k]||(o[k]={n:0,fl:0,kg:0});x.n++;x.fl+=fl;x.kg+=kg||0};
@@ -426,7 +444,7 @@ function renderSum(){
   const grp=o=>Object.keys(o).sort((a,b)=>o[b].kg-o[a].kg).map(k=>[k,String(o[k].n),String(o[k].fl),o[k].kg?sp(o[k].kg):"–"]);
   return '<h2>Sammanställning</h2>'+
    sec("Totalt",'<div class="stats"><div class="stat"><span class="k">Körningar</span><span class="v">'+T.legs+'</span></div><div class="stat"><span class="k">Lossade</span><span class="v">'+T.done+'</span></div><div class="stat"><span class="k">Levererat kg</span><span class="v">'+sp(T.kg)+'</span></div><div class="stat"><span class="k">Med släp</span><span class="v">'+T.trl+'</span></div></div><p class="muted" style="margin:0;font-size:14px">Kilogram räknas från tryck och flaknummer som chauffören anger vid Lastad ('+T.rep+' av '+T.fullN+' fulla körningar rapporterade).</p>')+
-   sec("Kilometer och bränsle",'<p class="muted" style="margin:0">Visas här när vi har datakällan (t.ex. mätarställning från chauffören eller data från Opter). Inte inlagt än.</p>')+
+   histCards()+
    sec("Gasen hämtas från (fulla flak)",tbl(["Plats","Körn.","Flak","kg"],grp(byFrom)))+
    sec("Levererat till (fulla flak)",tbl(["Plats","Körn.","Flak","kg"],grp(byTo)))+
    sec("Per bil",tbl(["Bil","Körn.","Med släp","kg"],Object.keys(byCar).map(k=>[k,String(byCar[k].n),String(byCar[k].trl),byCar[k].kg?sp(byCar[k].kg):"–"])))+
