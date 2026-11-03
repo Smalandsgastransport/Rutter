@@ -267,7 +267,7 @@ async function afterLoad(force){
   if(!S.bundle)return;
   if(window.ARKIV)return akLoad();
   if(force!==true&&S.lastDay===today()&&!(await repoHead())){if(S.bundle.role==="driver"&&pendingCount())await sync();return}
-  S.lastDay=today();
+  S.lastDay=today();S.fresh=true;
   ensurePush();
   if(S.bundle.role==='admin'){await loadPlansAdmin();await loadNotes();await loadPauser();await loadSwaps();await loadLedig();await loadFel();await loadHamt();await loadStat();if(S.view==='ark')arLoad().then(()=>render());
     const ds=[...new Set([today(),iso(new Date(Date.now()+864e5)),S.pl.date||today(),S.date].filter(Boolean))];
@@ -1555,11 +1555,11 @@ async function driverPoll(){
     if(sig!==S.nf2.sig){S.nf2.sig=sig;render()}}
   catch(e){}
   finally{S.pollBusy=false}}
-setInterval(driverPoll,20*1000);
+setInterval(driverPoll,10*1000);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")setTimeout(driverPoll,300)});
 
 setInterval(()=>{if(document.visibilityState==="visible"&&S.sess)refresh()},5*60*1000);
-setInterval(async()=>{if(document.visibilityState!=="visible"||!S.bundle)return;if(isOv()){await afterLoad();render()}else if(pendingCount()){await sync();render()}},20*1000);
+setInterval(async()=>{if(document.visibilityState!=="visible"||!S.bundle)return;if(isOv()){await afterLoad();if(S.fresh){S.fresh=false;render()}}else if(pendingCount()){await sync();render()}},10*1000);
 window.addEventListener("online",async()=>{if(S.bundle&&S.bundle.role==="driver"){await sync();render()}});
 /* ---------- Arkivappen: sparar körda godsdeklarationer som PDF i en mapp på datorn ---------- */
 S.ak={dir:null,perm:"",files:[],msg:"",busy:false,todo:0};
