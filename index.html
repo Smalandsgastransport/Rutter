@@ -164,7 +164,10 @@ html.wide .wrap{max-width:none;padding-left:18px;padding-right:22px;gap:12px}
 html.wide body{font-size:14px}
 html.wide h1{font-size:26px}
 html.wide h2{font-size:22px}html.wide .pagehead h2{font-size:26px}html.wide h3{font-size:17px}
-html.wide .minilogo{height:56px}
+html.wide .brand{display:grid;grid-template-columns:190px minmax(0,1fr);gap:20px;align-items:center;flex:1;min-width:0}
+html.wide .brand .minilogo{width:190px;height:auto}
+html.wide .top{flex-wrap:nowrap}
+html.wide .brand>div{padding-left:0}
 html.wide .shell{grid-template-columns:190px minmax(0,1fr);gap:20px}
 html.wide .side button{font-size:14px;padding:9px 12px}
 html.wide .btn{font-size:14px;min-height:36px;padding:6px 12px}
@@ -205,7 +208,7 @@ html.out,html.out body{background:var(--surface)}
 <body>
 <div class="wrap" id="app">
   <div class="top" id="topbar">
-    <div class="brand"><img class="minilogo" src="logo.svg" alt="Smålands Gastransport"><div><h1>Transport Planering</h1><p id="sub">Laddar…</p></div></div>
+    <div class="brand"><img class="minilogo" src="logo.svg" alt="Smålands Gastransport"><div><h1 id="ttl">Transport Planering</h1><p id="sub">Laddar…</p></div></div>
     <div class="acts"><button class="btn small" id="refresh">Uppdatera</button><button class="btn small" id="switch" hidden>Byt bil</button></div>
   </div>
   <div id="main"></div>
@@ -966,7 +969,10 @@ function render(){
     return}
   $("#topbar").hidden=false;$("#status").hidden=false;
   const car=(S.bundle&&S.bundle.car)||{name:""};
-  $("#sub").textContent=S.bundle&&S.bundle.role==="admin"?({ov:"Översikt",plan:"Planering",msg:"Meddelanden",paus:"Pauser",stat:"Stationer",sum:"Sammanställning"}[S.view]||"Översikt"):S.bundle&&S.bundle.role==="ekonomi"?"Sammanställning":(car.name||"");
+  {const CP={bil1:["Hagelsrum","Arne Carlsson"],bil2:["Bor","Annelie Steen"],bil3:["Tånnö","Niklas Hellstrand"]},isDrv=S.bundle&&S.bundle.role==="driver",cp=isDrv&&CP[car.id];
+   $("#ttl").textContent=isDrv?("Dagens rutt"+(cp?" – "+cp[0]:"")):"Transport Planering";
+   if(isDrv){$("#sub").textContent=(car.name||"")+(cp?" · "+cp[1]:(car.driver?" · "+car.driver:""));}}
+  if(!(S.bundle&&S.bundle.role==="driver"))$("#sub").textContent=S.bundle&&S.bundle.role==="admin"?({ov:"Översikt",plan:"Planering",msg:"Meddelanden",paus:"Pauser",stat:"Stationer",sum:"Sammanställning"}[S.view]||"Översikt"):S.bundle&&S.bundle.role==="ekonomi"?"Sammanställning":(car.name||"");
   if(!S.bundle){M.innerHTML='<div class="card muted">'+(S.err?esc(S.err):'Hämtar rutten…')+'</div>';return}
   if(isOv()){
     if(S.bundle.role==="ekonomi"){M.innerHTML='<div class="content">'+renderSum()+'</div>';return}
