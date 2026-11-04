@@ -216,6 +216,119 @@ html.out,html.out body{background:var(--surface)}
 </div>
 <div id="toastHost"></div>
 <script>
+/*GPSM*//* GPS-motor v1 – kontrollerar dagens godsdeklarationer mot GPS-stopp, summerar km/stopp.
+   Indata (dag) = samma format som Arnes/Annelies milrapport (Mapon route/list normaliserad):
+   {datum, forare, kmTotalt, rutter:[{bas,km,slap,start,slut,stopp:[{tid,plats,km,fraktsedel,typ,avvikelse}]}], vikt:{"HH:MM":{fore,efter,min}}}
+   Fungerar i webbläsare (window.GPSM) och node (module.exports). */
+(function(root){
+"use strict";
+const norm=v=>String(v||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9 ]+/g," ").replace(/\s+/g," ").trim();
+const STOP=new Set(["ab","vagen","vag","smalandska","brantsle","depa","hemma","kort","stopp","rast","lunch","natt","parkering","vid","kontoret","fyllstation","och","i","mapon","anger"]);
+const isNum=x=>typeof x==="number"&&isFinite(x);
+
+/* "Flishult/Vetlanda (22m) – rast/lunch" -> {namn, radie, notis, art} */
+function parsePlats(p){
+  p=String(p||"");
+  const m=p.match(/\((\d+)\s*m\)/);const radie=m?+m[1]:null;
+  let notis="";const dash=p.split(/\s[–-]\s/);let namn=dash[0];if(dash.length>1)notis=dash.slice(1).join(" – ");
+  namn=namn.replace(/\(\d+\s*m\)/g,"").replace(/\(natt\)/i,"").trim();
+  const all=norm(p);
+  let art="kund";
+  if(/\(natt\)|natt/.test(p)&&/parkering|natt/.test(all))art="natt";
+  if(/malilla depa|hagelsrum \(?hemma|hemma\)?$/.test(all)||/^hagelsrum|^malilla depa/.test(norm(namn)))art="bas";
+  if(/fyllstation|orrvagen/.test(all)&&!/vimmerby/.test(all))art="fyll";
+  if(/rast|lunch/.test(all))art="rast";
+  if(/kort stopp/.test(all))art="kort";
+  if(/kontor|hjalmar petris|torpvagen/.test(all))art="kontor";
+  if(/parkering/.test(all)&&art==="kund")art="parkering";
+  return {namn,radie,notis,art,nyckel:tokens(namn)};
+}
+function tokens(s){return norm(s).split(" ").filter(t=>t.length>2&&!STOP.has(t)&&!/^\d+$/.test(t));}
+const refsOf=s=>String((s&&s.fraktsedel)||"").split(",").map(x=>x.trim()).filter(x=>x&&x!=="–");
+
+/* Plattar ut rutter -> stopp med löpande ordning och km från föregående */
+function flatten(day){
+  const out=[];(day.rutter||[]).forEach((r,ri)=>{(r.stopp||[]).forEach((s,si)=>{const P=parsePlats(s.plats);
+    out.push({rutt:ri,idx:si,slap:!!r.slap,tid:s.tid,km:isNum(s.km)?s.km:0,plats:s.plats,typ:s.typ||null,refs:refsOf(s),avvikelse:s.avvikelse||null,...P,
+      sista:si===(r.stopp.length-1)});});});
+  return out;
+}
+const toMin=t=>{const m=String(t||"").match(/^(\d{1,2}):(\d{2})/);return m?(+m[1])*60+(+m[2]):null;};
+
+/* Viktändring av bilens axeltryck (Mapon can_period, 4 axlar) per stopp. Regel från Jesper: fall >=8 t = "Last av",
+   ökning >=8 t = "Last på", <2,5 t = ingen ändring, annars delvis. OBS: släp syns INTE i Mapon (bil+tomt flak ~14,7 t, fullt ~30-32 t),
+   så släp måste avgöras ur stoppmönster (>=2 kundstopp på samma rutt) eller bekräftas av Jesper. */
+function slapHandelser(day,tr){
+  tr=tr||8000;const ev=[];
+  for(const [t,v] of Object.entries(day.vikt||{})){
+    if(!isNum(v.fore)||!isNum(v.efter))continue;const d=v.efter-v.fore;
+    if(Math.abs(d)>=tr)ev.push({tid:t,min:v.min,fore:v.fore,efter:v.efter,delta:d,handelse:d>0?"Last på":"Last av",...(Math.abs(d)<2500?{}:{})});
+  }
+  return ev.sort((a,b)=>toMin(a.tid)-toMin(b.tid));
+}
+/* Standtid per stopp: närmaste viktpost inom ±3 min ger minuter stillastående */
+function standtid(day,stoppTid){
+  let best=null;for(const [t,v] of Object.entries(day.vikt||{})){const d=Math.abs(toMin(t)-toMin(stoppTid));if(d<=3&&(best==null||d<best.d))best={d,min:v.min};}
+  return best?best.min:null;
+}
+
+/* Deklarationer (fraktsedlar) för dagen: [{nr,typ,ort,adress,mottagare,avsandare,antal}] */
+function declTokens(d){return tokens([d.ort,d.adress,d.mottagare,d.avsandare,d.lastplats].join(" "));}
+
+/* Kontroll: varje deklaration mot GPS-stopp och tvärtom. Returnerar poster med nivå ok/varning/fel. */
+function verifiera(day,decls,opt){
+  opt=opt||{};const S=flatten(day);const res={datum:day.datum,poster:[],sammanfattning:{}};
+  const kunder=S.filter(s=>s.art==="kund"||s.refs.length);
+  const anv=new Set();
+  for(const d of decls){
+    const nr=String(d.nr||"").trim();
+    let hit=null,hur="";
+    if(nr){hit=S.find(s=>s.refs.includes(nr));if(hit)hur="nummer";}
+    if(!hit){const dt=declTokens(d);let bestS=0;for(const s of kunder){const sc=s.nyckel.filter(t=>dt.some(x=>x===t||x.startsWith(t)||t.startsWith(x))).length;
+        if(sc>bestS){bestS=sc;hit=s;}}
+      if(hit)hur="plats";}
+    if(!hit){res.poster.push({niva:"fel",kod:"INGET_STOPP",nr,text:`Deklaration ${nr||"(saknar nr)"} (${d.ort||d.adress||"?"}) – bilen var inte på någon sådan adress enligt GPS.`,decl:d});continue;}
+    anv.add(hit);
+    const p={niva:"ok",kod:"OK",nr,stopp:hit.plats,tid:hit.tid,hur,text:`Deklaration ${nr} stämmer mot GPS-stopp ${hit.tid} ${hit.namn}.`,decl:d};
+    if(hur==="plats"&&nr&&hit.refs.length&&!hit.refs.includes(nr)){p.niva="varning";p.kod="ANNAT_NR";p.text=`Deklaration ${nr} verkar höra till stoppet ${hit.tid} ${hit.namn}, men det stoppet är registrerat med ${hit.refs.join(", ")}.`;}
+    if(hur==="nummer"){const dt=declTokens(d);if(dt.length&&hit.nyckel.length&&!hit.nyckel.some(t=>dt.some(x=>x===t||x.startsWith(t)||t.startsWith(x)))){p.niva="varning";p.kod="ORT_STAMMER_INTE";p.text=`Nummer ${nr} finns på stoppet ${hit.tid} ${hit.namn}, men deklarationen anger ${d.ort||d.adress}. Kan vara fel ort eller fel nummer.`;}}
+    res.poster.push(p);
+  }
+  for(const s of S){if((s.art==="kund")&&!s.refs.length&&!anv.has(s)&&!s.sista&&!(s.avvikelse&&/okänt/i.test(s.avvikelse)&&false)){
+      res.poster.push({niva:"varning",kod:"STOPP_UTAN_DEKL",tid:s.tid,stopp:s.plats,text:`GPS-stopp ${s.tid} ${s.namn} har ingen deklaration.`});}}
+  // typkontroll: byte = en leverans + en retur per stopp
+  const per=new Map();for(const d of decls){const h=S.find(s=>s.refs.includes(String(d.nr||"").trim()));if(!h)continue;const k=h.tid+"|"+h.plats;if(!per.has(k))per.set(k,{L:0,R:0,h});const o=per.get(k);if(d.typ==="leverans")o.L+=d.antal||1;else if(d.typ==="retur_tom")o.R+=d.antal||1;}
+  for(const o of per.values()){if(o.h.typ==="byte"&&o.L!==o.R)res.poster.push({niva:"varning",kod:"BYTE_OJAMNT",tid:o.h.tid,stopp:o.h.plats,text:`Stoppet ${o.h.tid} ${o.h.namn} är ett byte men deklarationerna är ${o.L} leverans/${o.R} retur.`});}
+  const c=k=>res.poster.filter(p=>p.niva===k).length;
+  res.sammanfattning={ok:c("ok"),varning:c("varning"),fel:c("fel"),deklarationer:decls.length,status:c("fel")?"fel":c("varning")?"granska":"stammer"};
+  return res;
+}
+
+/* Summering för energideklaration: km, stopp, kundstopp, tomkörning, släpkm, rast, tomgång */
+function summera(day){
+  const S=flatten(day);const rutter=day.rutter||[];
+  const km=isNum(day.kmTotalt)?day.kmTotalt:rutter.reduce((a,r)=>a+(+r.km||0),0);
+  const kundStopp=S.filter(s=>s.art==="kund"&&(s.refs.length||!s.sista));
+  const leveranser=S.reduce((a,s)=>a+(s.refs.length?s.refs.length:0),0);
+  const rast=S.filter(s=>s.art==="rast");
+  const slapKm=rutter.filter(r=>r.slap).reduce((a,r)=>a+(+r.km||0),0);
+  const rastMin=rast.reduce((a,s)=>a+(standtid(day,s.tid)||0),0);
+  return {datum:day.datum,km:Math.round(km*10)/10,rutter:rutter.length,stopp:S.length,kundStopp:kundStopp.length,deklRader:leveranser,
+    slapKm:Math.round(slapKm*10)/10,enbartBilKm:Math.round((km-slapKm)*10)/10,rastStopp:rast.length,rastMin,
+    kmPerKundStopp:kundStopp.length?Math.round(km/kundStopp.length*10)/10:null,slapHandelser:slapHandelser(day)};
+}
+/* Rastplats-inlärning: räknar stopp som varit "rast/lunch" eller lång standtid utanför kunder */
+function larRastplatser(days){
+  const m=new Map();for(const d of days)for(const s of flatten(d)){if(s.art!=="rast")continue;const k=s.namn;const o=m.get(k)||{namn:k,antal:0,min:0};o.antal++;o.min+=standtid(d,s.tid)||0;m.set(k,o);}
+  return [...m.values()].sort((a,b)=>b.antal-a.antal);
+}
+function viktKlass(v){if(!v||!isNum(v.fore)||!isNum(v.efter))return null;const d=v.efter-v.fore;return d<=-8000?"Last av":d>=8000?"Last på":Math.abs(d)<2500?"Ingen ändring":"Delvis";}
+const api={viktKlass,parsePlats,flatten,slapHandelser,standtid,verifiera,summera,larRastplatser,norm,tokens};
+if(typeof module!=="undefined"&&module.exports)module.exports=api;else root.GPSM=api;
+})(typeof window!=="undefined"?window:globalThis);
+
+</script>
+<script>
 (function(){
 "use strict";
 const $=s=>document.querySelector(s);
@@ -627,7 +740,7 @@ function planCol(c,keep){
   h+=D.legs.length?'<div class="legs">'+D.legs.map((l,i)=>{const L=st.get(l.order+"|lastad"),U=st.get(l.order+"|lossad");
     return '<div class="leg"><div class="legtop"><span class="n">'+String(i+1).padStart(2,"0")+'</span><span class="pills">'+(l.antal>1?'<span class="pill p-antal">Antal '+l.antal+'</span>':'')+'<span class="pill p-type">'+esc(l.uppdrag)+'</span>'+(l.flakPlan&&l.flakPlan.length?'<span class="pill p-antal">Flak '+esc(l.flakPlan.join(" + "))+'</span>':'')+'<span class="pill p-'+esc(l.load)+'">'+esc(LOADS[l.load]||l.load)+' · '+esc(l.mangd)+'</span>'+(L?'<span class="pill p-full">Lastad '+esc(hhmm(L.ts))+'</span>':'')+(U?'<span class="pill p-full">Lossad '+esc(hhmm(U.ts))+'</span>':'')+'</span></div><div class="note"><b>'+esc(l.from.name)+'</b> → <b>'+esc(l.to.name)+'</b></div>'+(l.note?'<div class="note">'+esc(l.note)+'</div>':'')+
       '<div class="acts"><button class="btn small" data-plup="'+i+'"'+(i?'':' disabled')+'>↑</button><button class="btn small" data-pldown="'+i+'"'+(i<D.legs.length-1?'':' disabled')+'>↓</button><button class="btn small" data-pledit="'+i+'">Ändra</button><button class="btn link" data-pldel="'+i+'">Radera</button></div></div>'}).join("")+'</div>':'<p class="muted" style="margin:0">Inga transporter än för den här dagen.</p>';
-  h+=(D.legs.length?'':'<div><button class="btn" data-plcopy="1">Kopiera gårdagens rutt</button></div>');
+  h+=(D.legs.length?'':'<div><button class="btn" data-plcopy="1">Kopiera gårdagens rutt</button> <button class="btn" data-plcopy="7">Kopiera från förra veckan</button></div>');
   h+=F?'<div class="card" style="display:flex;flex-direction:column;gap:10px"><b>'+(F.idx!=null?'Ändra transport':'Ny transport')+'</b>'+
     '<label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Hämta<select id="plFrom" '+sel+'>'+plOpts(F.from)+'</select></label><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Lämna<select id="plTo" '+sel+'>'+plOpts(F.to)+'</select></label>'+
     '<div class="acts" style="align-items:center"><button class="btn'+(F.load==="full"?' go':'')+'" data-plload="full">Fullt</button><button class="btn'+(F.load==="tom"?' go':'')+'" data-plload="tom">Tomt</button><label class="muted" style="font-size:14px;display:flex;align-items:center;gap:8px">Antal flak<select id="plAntal" '+sel.replace("width:100%","width:auto")+'>'+[1,2,3,4].map(n=>'<option'+(n===F.antal?' selected':'')+'>'+n+'</option>').join("")+'</select></label></div>'+
@@ -805,6 +918,7 @@ function renderArk(){
   const A=S.ar,cars=S.bundle.planCars||[],rows=(A.rows||[]).slice().reverse(),vis=A.car==="all"?rows:rows.filter(x=>x.dir===(cars.find(c=>c.id===A.car)||{}).dir);
   let h='<div class="pagehead"><h2>Arkiv</h2><p class="muted">Alla körda deklarationer för alla bilar. Samma deklarationer ligger sparade i varje förares app.</p></div>';
   h+='<div class="notice warn">Testdagar ('+TEST_DATES.join(", ")+') sparas inte i arkivet och räknas inte med i Sammanställningen eller exporten.</div>';
+  h+='<div class="card" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between"><div><b>Säkerhetskopia</b><div class="muted" style="font-size:14px">Alla planer, ledighet, hämtningar, pauser, felrapporter, anteckningar och historik som en JSON-fil. Sparas på den här datorn.</div></div><button class="btn" data-backup="1">Ladda ner säkerhetskopia</button></div>';
   h+='<div class="tiles">'+cars.map(c=>{const r=rows.filter(x=>x.dir===c.dir),kg=r.reduce((a,x)=>a+(x.leg.kg||0),0),dd=new Set(r.map(x=>x.date)).size;return '<div class="tile"><span class="k">'+esc(c.name)+(c.driver?' · '+esc(c.driver.split(" ")[0]):'')+'</span><span class="v">'+r.length+' <small>transporter</small></span><span class="muted" style="font-size:13px">'+dd+' dagar'+(kg?' · '+sp(kg)+' kg':'')+'</span></div>'}).join("")+'</div>';
   h+='<div class="card" style="margin-top:14px"><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;align-items:center"><div class="chips"><button class="chip" data-ar="car" data-c="all"'+(A.car==="all"?' aria-current="date"':'')+'>Alla bilar</button>'+cars.map(c=>'<button class="chip" data-ar="car" data-c="'+c.id+'"'+(A.car===c.id?' aria-current="date"':'')+'>'+esc(c.name)+'</button>').join("")+'</div><button class="btn small" data-ar="csv">Exportera data (CSV)</button></div>'+
     (A.busy?'<p class="muted">Hämtar…</p>':'')+
@@ -1329,6 +1443,68 @@ function histBlock(car,O){
     sec("Bil och bränsle",tbl(["Bil","Reg.nr","Bränsle","Släp"],fuel))+
     (perDag.length?sec("Körda dagar (milrapport)",tbl(["Datum","Bil","Förare","Km","Släp"],perDag)):"");
 }
+
+/* ---- Milrapport: GPS-dagar, rutter och stopp per bil (samma upplägg som milrapporterna) ---- */
+S.milCar="bil1";S.milMon="";
+function milDays(){const H=(S.bundle&&S.bundle.hist)||{dagar:[]};return (H.dagar||[]).filter(d=>d.rutter&&d.rutter.length&&d.car===S.milCar&&!isTest(d.datum)&&(!S.milMon||d.datum.slice(0,7)===S.milMon)).sort((a,b)=>a.datum<b.datum?1:-1)}
+function milCount(d){/* stopp = fraktsedelrader (leverans 1 + retur 1) */let n=0;d.rutter.forEach(r=>r.stopp.forEach(s=>{if(s.fs)n+=String(s.fs).split(",").filter(x=>x.trim()&&x.trim()!=="–").length}));return n}
+function milFlags(d){/* GPS-kontroll i appen: stopp utan deklaration, byten utan 2 sedlar */
+  const F=[];d.rutter.forEach(r=>r.stopp.forEach((s,i)=>{const P=GPSM.parsePlats(s.plats),n=s.fs?String(s.fs).split(",").filter(x=>x.trim()).length:0;
+    if(s.avv)F.push(["warn",s.tid+" "+P.namn+": "+s.avv]);
+    else if(P.art==="kund"&&!n&&!(i===r.stopp.length-1)&&!s.typ)F.push(["warn",s.tid+" "+P.namn+": GPS-stopp utan deklaration"]);
+    if(s.typ==="byte"&&n&&n%2)F.push(["warn",s.tid+" "+P.namn+": byte med udda antal sedlar ("+n+")"])}));
+  return F}
+function renderMil(){
+  const H=(S.bundle&&S.bundle.hist)||{dagar:[],bilar:{}},B=H.bilar||{};
+  const n1=x=>(Math.round(x*10)/10).toLocaleString("sv-SE"),f1=v=>v==null||v===""?"–":n1(v);
+  const MN=["januari","februari","mars","april","maj","juni","juli","augusti","september","oktober","november","december"];
+  const chip=(k,l,a)=>'<button class="chip" data-milcar="'+k+'"'+(S.milCar===k?' aria-current="date"':'')+'>'+l+'</button>';
+  const all=(H.dagar||[]).filter(d=>d.car===S.milCar&&d.rutter&&d.rutter.length&&!isTest(d.datum));
+  const mons=[...new Set(all.map(d=>d.datum.slice(0,7)))].sort();
+  let h='<div class="pagehead"><h2>Milrapport</h2><p class="muted">GPS-rutter, km mellan stopp och kontroll mot deklarationerna. '+esc((B[S.milCar]||{}).reg||"")+" · "+esc((B[S.milCar]||{}).fuel||"")+'</p></div>';
+  h+='<div class="chips">'+CARS.map(c=>chip(c[0],c[1])).join("")+'</div>';
+  if(!all.length)return h+'<div class="card muted">Ingen GPS-data inläst för den här bilen ännu.'+(S.milCar==="bil3"?" Bil 3 följs via färdskrivare och mätare, inte GPS.":"")+'</div>';
+  h+='<div class="chips"><button class="chip" data-milmon=""'+(S.milMon===""?' aria-current="date"':'')+'>Alla</button>'+mons.map(m=>'<button class="chip" data-milmon="'+m+'"'+(S.milMon===m?' aria-current="date"':'')+'>'+MN[+m.slice(5)-1]+'</button>').join("")+'</div>';
+  /* månadskort */
+  h+='<div class="tiles">'+mons.map(m=>{const D=all.filter(d=>d.datum.slice(0,7)===m&&!/^Väntar/.test(d.status||""));
+    if(!D.length)return '<div class="tile"><span class="k">'+MN[+m.slice(5)-1]+'</span><span class="v">–</span><small>Väntar på deklarationer</small></div>';
+    let st=0,km=0,sSt=0,sKm=0,sR=0;D.forEach(d=>{km+=d.km||0;st+=milCount(d);d.rutter.forEach(r=>{const k=r.stopp.reduce((a,s)=>a+(s.fs?String(s.fs).split(",").filter(x=>x.trim()).length:0),0);if(r.slap&&(r.kund||0)>=2){sR++;sSt+=k;sKm+=r.km||0}})});
+    return '<div class="tile"><span class="k">'+MN[+m.slice(5)-1]+' · '+D.length+' dagar</span><span class="v">'+st+' <small>stopp</small></span><small>'+Math.round(km).toLocaleString("sv-SE")+' km · '+(st?n1(km/st):"–")+' km/stopp</small><small>Bil: '+(st-sSt)+' stopp, '+(st-sSt?n1((km-sKm)/(st-sSt)):"–")+' km/stopp</small><small>Bil+släp: '+(sR?sR+' runda'+(sR>1?"or":"")+", "+sSt+" stopp, "+n1(sKm/sSt)+" km/stopp":"inga")+'</small></div>'}).join("")+'</div>';
+  /* per station: enkelkundsrutter */
+  const per={};all.filter(d=>!S.milMon||d.datum.slice(0,7)===S.milMon).forEach(d=>d.rutter.forEach(r=>{const c=r.stopp.filter(s=>s.typ==="byte");if(c.length===1&&!r.slap){const nm=GPSM.parsePlats(c[0].plats).namn;(per[nm]||(per[nm]=[])).push(r.km)}}));
+  const rows=Object.keys(per).sort((a,b)=>per[b].length-per[a].length).map(k=>{const v=per[k];return [k,String(v.length),n1(v.reduce((a,b)=>a+b,0)/v.length),n1(Math.min(...v))+"–"+n1(Math.max(...v))]});
+  if(rows.length)h+='<div class="card" style="display:flex;flex-direction:column;gap:10px"><h3 style="font-size:19px">Per station (enkelrutter utan släp)</h3>'+tbl(["Station","Besök","Snitt km/rutt","Min–max"],rows)+'<p class="muted" style="margin:0;font-size:13.5px">Används som jämförelsevärde: en rutt som avviker mycket från snittet är värd att kontrollera.</p></div>';
+  h+='<div><button class="btn" data-milcsv="1">Ladda ner km och stopp (CSV, för energideklarationen)</button></div>';
+  /* dagkort */
+  milDays().forEach(d=>{const fl=milFlags(d),wait=/^Väntar/.test(d.status||"");
+    h+='<details class="card mil-day"><summary style="cursor:pointer;display:flex;gap:10px;flex-wrap:wrap;align-items:baseline"><b style="font-size:18px">'+esc(dayLabel(d.datum))+'</b><span class="muted">'+f1(d.km)+' km · '+d.rutter.length+' rutter · '+milCount(d)+' stopp</span>'+(d.forare?'<span class="muted">'+esc(d.forare.split(" ")[0])+'</span>':'')+
+      (wait?'<span class="chip">Väntar på deklarationer</span>':fl.length?'<span class="chip" style="border-color:var(--warn,#b26b00)">'+fl.length+' att granska</span>':'<span class="chip">Stämmer</span>')+'</summary>'+
+      (d.kommentar?'<p class="muted" style="margin:8px 0">'+esc(d.kommentar)+'</p>':'')+
+      (fl.length?'<ul style="margin:6px 0 10px;padding-left:20px">'+fl.map(x=>'<li>'+esc(x[1])+'</li>').join("")+'</ul>':'')+
+      d.rutter.map((r,i)=>'<div style="margin-top:10px"><b>Rutt '+(i+1)+(r.bas?" från "+esc(r.bas):"")+'</b> <span class="muted">'+(r.slap?"Bil + släp":"Bil")+' · '+f1(r.km)+' km · '+esc(r.start||"")+(r.slut?"–"+esc(r.slut):"")+'</span>'+
+        tbl(["Tid","Plats","Fraktsedel","Typ","Km från förra","Vikt","Stod"],r.stopp.map(s=>[s.tid||"–",s.plats||"–",s.fs||"–",s.typ||"–",f1(s.km),s.vikt||"–",s.min!=null?s.min+" min":"–"]))+'</div>').join("")+'</details>'});
+  return h;
+}
+
+/* ---- Veckovy: alla bilar, sju dagar, ledighet ---- */
+S.vecW=0;
+function renderVec(){
+  const B=S.bundle,pcs=(B.planCars||[]).filter(c=>c.dir);
+  const now=new Date();now.setHours(12,0,0,0);const dow=(now.getDay()+6)%7;
+  const mon=new Date(now.getTime()-dow*864e5+S.vecW*7*864e5),ds=[...Array(7)].map((_,i)=>iso(new Date(mon.getTime()+i*864e5)));
+  const wk=(function(d){const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));t.setUTCDate(t.getUTCDate()+4-(t.getUTCDay()||7));const y=new Date(Date.UTC(t.getUTCFullYear(),0,1));return Math.ceil(((t-y)/864e5+1)/7)})(mon);
+  const DN=["mån","tis","ons","tor","fre","lör","sön"];
+  let h='<div class="pagehead"><h2>Vecka '+wk+'</h2><p class="muted">Alla bilar, sju dagar. Tryck på en ruta för att öppna planeringen.</p></div>'+
+   '<div class="chips"><button class="chip" data-vecw="-1">‹ Föregående</button><button class="chip" data-vecw="0"'+(S.vecW===0?' aria-current="date"':'')+'>Denna vecka</button><button class="chip" data-vecw="1">Nästa ›</button></div>';
+  h+='<div class="card" style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:760px;font-size:15px"><thead><tr><th style="text-align:left;padding:8px;border-bottom:2px solid var(--line)">Bil</th>'+ds.map((d,i)=>'<th style="text-align:left;padding:8px;border-bottom:2px solid var(--line)'+(d===today()?';background:var(--sunk)':'')+'">'+DN[i]+' '+(+d.slice(8))+'/'+(+d.slice(5,7))+'</th>').join("")+'</tr></thead><tbody>';
+  pcs.forEach(pc=>{h+='<tr><td style="padding:8px;border-bottom:1px solid var(--line);vertical-align:top"><b>'+esc(pc.name||pc.id)+'</b><div class="muted" style="font-size:13px">'+esc(((pc.driver||"")+"").split(" ")[0])+'</div></td>';
+    ds.forEach(d=>{const cc=(B.cars||[]).find(x=>x.dir===pc.dir),p=S.plans[pc.dir+"|"+d]||(cc&&cc.days&&cc.days[d]&&{legs:cc.days[d].legs.map(l=>({load:l.load})),trailer:cc.days[d].trailer,sent:1}),legs=p&&p.legs?p.legs.filter(l=>!l.deleted):[],led=(S.led||[]).find(x=>x.from<=d&&x.to>=d&&x.status==="godkand"&&(x.dir===pc.dir||x.car===pc.id));
+      const n=legs.length,full=legs.filter(l=>l.load==="full").length;
+      h+='<td style="padding:4px;border-bottom:1px solid var(--line);vertical-align:top"><button type="button" data-vec="'+d+'|'+esc(pc.id)+'" style="width:100%;min-height:58px;text-align:left;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:'+(led?'var(--warn-bg,#fdf1d8)':n?'var(--surface)':'transparent')+';color:var(--fg);font:inherit;font-size:14px;cursor:pointer">'+
+        (led?'<b>Ledig</b><div class="muted" style="font-size:12px">'+esc((led.typ||led.orsak||"").toString().slice(0,18))+'</div>':n?'<b>'+n+' körn.</b><div class="muted" style="font-size:12px">'+full+' fulla'+(p&&p.trailer?' · släp':'')+(p&&p.sent?'':' · ej utskickad')+'</div>':'<span class="muted">–</span>')+'</button></td>'});
+    h+='</tr>'});
+  return h+'</tbody></table></div>';
+}
 function renderSum(){
   const car=S.sumTab||"tot",O=sumData(car),names=Object.fromEntries(CARS);
   const sec=(t,h)=>'<div class="card" style="display:flex;flex-direction:column;gap:10px"><h3 style="font-size:19px">'+t+'</h3>'+h+'</div>';
@@ -1385,14 +1561,14 @@ function render(){
   {const CP={bil1:["Hagelsrum","Arne Carlsson"],bil2:["Bor","Annelie Steen"],bil3:["Tånnö","Niklas Hellstrand"]},isDrv=S.bundle&&S.bundle.role==="driver",cp=isDrv&&CP[car.id];
    $("#ttl").textContent=isDrv?("Dagens rutt"+(cp?" – "+cp[0]:"")):"Transport Planering";
    if(isDrv){$("#sub").textContent=(car.name||"")+(cp?" · "+cp[1]:(car.driver?" · "+car.driver:""));}}
-  if(!(S.bundle&&S.bundle.role==="driver"))$("#sub").textContent=S.bundle&&S.bundle.role==="admin"?({ov:"Översikt",plan:"Planering",msg:"Meddelanden",paus:"Pauser",led:"Ledighet",ark:"Arkiv",fel:"Verkstad",ham:"Hämtningar",stat:"Stationer",sum:"Sammanställning"}[S.view]||"Översikt"):S.bundle&&S.bundle.role==="ekonomi"?"Sammanställning":(car.name||"");
+  if(!(S.bundle&&S.bundle.role==="driver"))$("#sub").textContent=S.bundle&&S.bundle.role==="admin"?({ov:"Översikt",plan:"Planering",msg:"Meddelanden",paus:"Pauser",led:"Ledighet",ark:"Arkiv",fel:"Verkstad",ham:"Hämtningar",stat:"Stationer",sum:"Sammanställning",mil:"Milrapport",vec:"Veckovy"}[S.view]||"Översikt"):S.bundle&&S.bundle.role==="ekonomi"?"Sammanställning":(car.name||"");
   if(!S.bundle){M.innerHTML='<div class="card muted">'+(S.err?esc(S.err):'Hämtar rutten…')+'</div>';return}
   if(isOv()){
     if(S.bundle.role==="ekonomi"){M.innerHTML='<div class="content">'+renderSum()+'</div>';return}
     const cnt=(S.bundle.planCars||[]).reduce((a,c)=>a+notisUnread(c.dir,today()).length+notisUnread(c.dir,iso(new Date(Date.now()+864e5))).length,0)+andringNek();
-    const items=[["ov","Översikt",cnt],["plan","Planering",0],["msg","Meddelanden",0],["stat","Stationer",0],["paus","Pauser",0],["ham","Hämtningar",hmOpen()],["fel","Verkstad",felNy()],["ark","Arkiv",0],["led","Ledighet",S.led.filter(x=>x.status==="ny").length],["sum","Sammanställning",0]];
+    const items=[["ov","Översikt",cnt],["plan","Planering",0],["msg","Meddelanden",0],["stat","Stationer",0],["paus","Pauser",0],["ham","Hämtningar",hmOpen()],["fel","Verkstad",felNy()],["ark","Arkiv",0],["led","Ledighet",S.led.filter(x=>x.status==="ny").length],["vec","Vecka",0],["mil","Milrapport",0],["sum","Sammanställning",0]];
     const nav='<nav class="side"><div class="sidehd">Kontoret</div>'+items.map(([k,l,n])=>'<button data-view="'+k+'"'+(S.view===k?' aria-current="page"':'')+'><span>'+l+'</span>'+(n?'<i class="badge">'+n+'</i>':'')+'</button>').join("")+'</nav>';
-    M.innerHTML='<div class="shell">'+nav+'<div class="content">'+(S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'</div></div>';return}
+    M.innerHTML='<div class="shell">'+nav+'<div class="content">'+(S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'</div></div>';return}
   const ds=days();let h=alertsHtml();
   if(ds.length)h+='<div class="chips">'+ds.map(d=>'<button class="chip" data-date="'+d+'"'+(d===S.date?' aria-current="date"':'')+'>'+esc(dayLabel(d))+' <span>'+S.bundle.days[d].legs.length+' st</span></button>').join("")+'</div>';
   const r=route();
@@ -1426,14 +1602,23 @@ document.addEventListener("click",async e=>{
     const blob=new Blob([csv],{type:"text/csv"}),f=new File([blob],"rapport-ekonomi.csv",{type:"text/csv"});
     if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:"rapport-ekonomi.csv"});return}catch(e){if(e&&e.name==="AbortError")return}}
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="rapport-ekonomi.csv";document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);return}
+  if(t.dataset.milcsv){const H=(S.bundle.hist||{dagar:[]}),q=v=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"',R=[["Datum","Bil","Regnr","Bränsle","Förare","Status","Km totalt","Rutter","Stopp (fraktsedelrader)","Km med släp","Km utan släp"]];
+    (H.dagar||[]).filter(d=>d.rutter&&d.rutter.length&&!isTest(d.datum)).sort((a,b)=>a.datum<b.datum?-1:a.datum>b.datum?1:a.car<b.car?-1:1).forEach(d=>{const b=(H.bilar||{})[d.car]||{},sl=d.rutter.filter(r=>r.slap).reduce((a,r)=>a+(r.km||0),0);R.push([d.datum,d.car,b.reg||"",b.fuel||"",d.forare||"",d.status||"",d.km,d.rutter.length,milCount(d),Math.round(sl*10)/10,Math.round(((d.km||0)-sl)*10)/10])});
+    const bl=new Blob(["\ufeff"+R.map(r=>r.map(q).join(";")).join("\r\n")],{type:"text/csv"}),a=document.createElement("a");a.href=URL.createObjectURL(bl);a.download="milrapport-km-stopp.csv";document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);return}
+  if(t.dataset.backup){const B=S.bundle,out={skapad:new Date().toISOString(),version:1,planer:S.plans,anteckningar:S.notes||[],ledighet:S.led||[],hamtningar:S.hm||[],pauser:S.paus||[],felrapporter:(S.fel||[]).map(x=>{const y=Object.assign({},x);delete y.bilder;return y}),historik:B.hist||null};
+    const bl=new Blob([JSON.stringify(out,null,1)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(bl);a.download="sakerhetskopia-"+iso(new Date())+".json";document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);toast("Säkerhetskopian är nerladdad.");return}
+  if(t.dataset.vecw!==undefined){S.vecW=t.dataset.vecw==="0"?0:S.vecW+ +t.dataset.vecw;render();return}
+  if(t.dataset.vec){const [d,c]=t.dataset.vec.split("|");S.view="plan";S.pl.date=d;S.pl.car=c;render();return}
+  if(t.dataset.milcar){S.milCar=t.dataset.milcar;S.milMon="";render();return}
+  if(t.dataset.milmon!==undefined){S.milMon=t.dataset.milmon;render();return}
   if(t.dataset.sumtab){S.sumTab=t.dataset.sumtab;render();window.scrollTo(0,0);return}
   if(t.dataset.range!==undefined){const [a,b]=t.dataset.range.split("|");S.from=a;S.to=b;render();return}
   if(t.dataset.pcar){readPl();S.pl.car=t.dataset.pcar;S.pl.form=null;render();return}
   if(t.dataset.pdate!==undefined){S.pl.date=iso(new Date(Date.now()+864e5*(+t.dataset.pdate)));S.pl.form=null;render();return}
-  if(t.dataset.plcopy){const prev=iso(new Date(new Date(S.pl.date+"T12:00:00").getTime()-864e5)),src=S.plans[planCar().dir+"|"+prev];
-    if(!src||!src.legs||!src.legs.length){toast("Det finns ingen utskickad rutt gårdagen att kopiera.");return}
+  if(t.dataset.plcopy){const back=t.dataset.plcopy==="7"?7:1,prev=iso(new Date(new Date(S.pl.date+"T12:00:00").getTime()-back*864e5)),src=S.plans[planCar().dir+"|"+prev];
+    if(!src||!src.legs||!src.legs.length){toast(back===7?"Det finns ingen rutt samma veckodag förra veckan att kopiera.":"Det finns ingen utskickad rutt gårdagen att kopiera.");return}
     const D=plDraft(),pre=S.pl.date.slice(2).replace(/-/g,"")+"-B"+String(S.pl.car).replace(/\D/g,"")+"-";D.legs=[];D.next=1;
-    src.legs.forEach(l=>{D.legs.push(Object.assign({},l,{order:pre+String(D.next++).padStart(2,"0")}))});plSaveDraft();render();toast("Kopierat från gårdagen.");return}
+    src.legs.forEach(l=>{D.legs.push(Object.assign({},l,{order:pre+String(D.next++).padStart(2,"0")}))});plSaveDraft();render();toast(back===7?"Kopierat från förra veckan.":"Kopierat från gårdagen.");return}
   if(t.dataset.plnew){S.pl.form={from:"",to:"",load:"full",antal:1,note:"",flak:"",idx:null,err:""};render();return}
   if(t.dataset.plcancel){S.pl.form=null;render();return}
   if(t.dataset.plload){readPl();S.pl.form.load=t.dataset.plload;render();return}
