@@ -755,11 +755,31 @@ function renderPlan(){
   if(!S.pl.date)S.pl.date=iso(new Date(Date.now()+864e5));
   const sel='style="font:inherit;font-size:17px;padding:10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg);width:auto"';
   if(!S.pl.car||!(B.planCars||[]).some(c=>c.id===S.pl.car))S.pl.car=((B.planCars||[])[0]||{}).id;
-  let h='<h2>Planering</h2>'+'<div class="card" style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><label class="muted" style="font-size:14px">Dag <input type="date" id="pDate" value="'+esc(S.pl.date)+'" '+sel+'></label><button class="chip" data-pdate="0">Idag</button><button class="chip" data-pdate="1">Imorgon</button></div></div>';
+  let h='<h2>Planering</h2>'+'<div class="card" style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><label class="muted" style="font-size:14px">Dag <input type="date" id="pDate" value="'+esc(S.pl.date)+'" '+sel+'></label><button class="chip" data-pdate="0">Idag</button><button class="chip" data-pdate="1">Imorgon</button><button class="chip" data-mvopen="1">Flytta hela dagen…</button></div>'+(S.pl.mv?'<div class="notice warn" style="display:flex;flex-direction:column;gap:10px"><b>Flytta alla bilars rutter från '+esc(dayLabel(S.pl.date))+'</b><div class="muted" style="font-size:14px">Rutterna, ordrarna och godsdeklarationerna får det nya datumet och skickas ut på den nya dagen. Den gamla dagen töms. Förarna får en avisering. Det som förarna redan hunnit godkänna eller kvittera på den gamla dagen följer inte med.</div><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><label style="font-size:14px">Nytt datum <input type="date" id="mvTo" value="'+esc(S.pl.mv.to)+'" '+sel+'></label><button class="btn primary" data-mvgo="1"'+(S.pl.mv.busy?' disabled':'')+'>'+(S.pl.mv.busy?'Flyttar…':'Flytta dagen')+'</button><button class="btn" data-mvcancel="1">Avbryt</button></div>'+(S.pl.mv.err?'<div class="notice warn">'+esc(S.pl.mv.err)+'</div>':'')+'</div>':'')+'</div>';
   h+=notisCard(S.pl.date)+andringCard()+swapAdminCard();
   const keep=S.pl.car;
   h+='<div class="plcols">'+(B.planCars||[]).map(c=>{S.pl.car=c.id;try{return planCol(c,keep)}finally{S.pl.car=keep}}).join("")+'</div>';
   return h}
+
+/* Flytta hela dagens rutter (alla bilar) till annat datum – inkl. deklarationernas datum */
+async function plMoveDay(from,to){
+  const B=S.bundle,cars=(B.planCars||[]),jobs=[];
+  if(!to||to===from)throw new Error("Välj ett annat datum.");
+  for(const c of cars){const src=S.plans[c.dir+"|"+from];if(!src||!src.legs||!src.legs.length)continue;
+    const dst=S.plans[c.dir+"|"+to];if(dst&&dst.legs&&dst.legs.length)throw new Error((c.name||c.id)+" har redan en utskickad rutt den "+dayLabel(to).toLowerCase()+". Ta tillbaka den först.");
+    jobs.push([c,src])}
+  if(!jobs.length)throw new Error("Det finns inga utskickade rutter att flytta den dagen.");
+  const now=new Date().toISOString();
+  for(const [c,src] of jobs){
+    const moved=Object.assign({},src,{date:to,dDate:to,updated:now,legs:src.legs.map(l=>Object.assign({},l))});
+    await ghPlanPut(c.dir,to,moved);
+    const empty=Object.assign({},src,{legs:[],updated:now});
+    await ghPlanPut(c.dir,from,empty);
+    S.plans[c.dir+"|"+to]=moved;S.plans[c.dir+"|"+from]=empty;
+    const bc=B.cars.find(x=>x.dir===c.dir);if(bc){delete bc.days[from];bc.days[to]=ovDay(moved)}
+    for(const d of [from,to]){const k=c.dir+"|"+d;delete S.pl.drafts[k];store.set("pl:"+k,null)}
+  }
+  return jobs.length}
 async function plSend(retract){
   const D=plDraft(),car=planCar();readPl();
   const out=Object.assign({},D,{legs:retract?[]:D.legs,updated:new Date().toISOString(),company:S.bundle.company||"Småländska Bränslen AB",dDate:S.pl.date});
@@ -1634,6 +1654,12 @@ document.addEventListener("click",async e=>{
     if(F.idx!=null){Object.assign(D.legs[F.idx],leg)}
     else{const pre=S.pl.date.slice(2).replace(/-/g,"")+"-B"+String(S.pl.car).replace(/\D/g,"")+"-";leg.order=pre+String(D.next||D.legs.length+1).padStart(2,"0");D.next=(D.next||D.legs.length+1)+1;D.legs.push(leg)}
     S.pl.form=null;plSaveDraft();render();return}
+  if(t.dataset.mvopen){S.pl.mv={to:today()===S.pl.date?iso(new Date(Date.now()+864e5)):today(),err:"",busy:false};render();return}
+  if(t.dataset.mvcancel){S.pl.mv=null;render();return}
+  if(t.dataset.mvgo){const mv=S.pl.mv;if(!mv||mv.busy)return;const to=(document.getElementById("mvTo")||{}).value||mv.to;mv.to=to;mv.busy=true;mv.err="";render();
+    try{const n=await plMoveDay(S.pl.date,to);const from=S.pl.date;S.pl.mv=null;S.pl.date=to;toast("Flyttade "+n+" bil"+(n>1?"ars":"s")+" rutt från "+dayLabel(from).toLowerCase()+" till "+dayLabel(to).toLowerCase()+".")}
+    catch(e){mv.busy=false;mv.err=(e&&e.message&&!/^(put|get|status)/.test(e.message))?e.message:"Kunde inte flytta dagen. Kontrollera nätet. Någon bil kan redan vara flyttad – kolla i Planering och Översikt innan du försöker igen."}
+    render();return}
   if(t.dataset.plsend){t.disabled=true;await plSend(false);render();return}
   if(t.dataset.plretract){t.disabled=true;await plSend(true);render();return}
   if(t.dataset.mcar){readMsg();const F=S.nf,k=t.dataset.mcar;if(k==="all"){F.cars={all:true}}else{delete F.cars.all;F.cars[k]=!F.cars[k];if(!Object.keys(F.cars).some(x=>F.cars[x]))F.cars={all:true}}render();return}
