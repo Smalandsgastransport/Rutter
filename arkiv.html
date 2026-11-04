@@ -708,8 +708,11 @@ const planCar=()=>(S.bundle.planCars||[]).find(c=>c.id===S.pl.car)||{};
 const planKeyOf=()=>planCar().dir+"|"+S.pl.date;
 function plDraft(){
   const k=planKeyOf();
+  {const c=S.pl.drafts[k],b=S.plans[k];if(c&&b&&!c.dirty&&b.updated&&c.sent!==b.updated)delete S.pl.drafts[k]}
   if(!S.pl.drafts[k]){let d=null;try{d=JSON.parse(store.get("pl:"+k)||"null")}catch(e){}
     const base=S.plans[k];if(base&&base.legs&&base.legs.length)base.sent=base.updated;
+    /* ett gammalt lokalt utkast får aldrig dölja det som faktiskt är utskickat: använd det bara för osparade ändringar på samma version */
+    if(d&&base&&(!d.dirty||(d.baseUpd&&d.baseUpd!==base.updated))){if(d.dirty)setTimeout(()=>toast("Planeringen för "+dayLabel(S.pl.date).toLowerCase()+" ändrades av någon annan. Dina osparade ändringar kasserades."),300);d=null;store.set("pl:"+k,null)}
     let imp=null;if(!d&&!base){const oc=S.bundle.cars.find(x=>x.dir===planCar().dir),od=oc&&oc.days&&oc.days[S.pl.date];
       if(od&&od.legs&&od.legs.length){const pre=S.pl.date.slice(2).replace(/-/g,"")+"-B"+String(S.pl.car).replace(/\D/g,"")+"-";
         imp={date:S.pl.date,car:S.pl.car,carName:planCar().name,driver:od.driver||planCar().driver||"",trailer:od.trailer||planCar().trailer||"",reg:od.reg||planCar().reg||"",next:od.legs.length+1,sent:od.updated||Date.now(),dirty:false,imported:true,
@@ -720,7 +723,7 @@ function plInfo(c){const k=c.dir+"|"+S.pl.date;let d=S.pl.drafts[k];if(!d){try{d
   return {driver:(d&&d.driver)||c.driver||"",reg:(d&&d.reg)||c.reg||"",trailer:(d&&d.trailer)||c.trailer||"",n:d&&d.legs?d.legs.length:0,sent:!!(d&&d.sent)}}
 const parseFlak=v=>String(v||"").toUpperCase().replace(/FLAK/g," ").split(/[^0-9A-Z]+/).filter(Boolean);
 function flakPlanInfo(v){const n=parseFlak(v),fl=S.bundle.flak||{};if(!n.length)return "";return n.map(x=>fl[x]?'Flak '+x+': '+fl[x][0]+' bar · '+m3(fl[x][1]):'Flak '+x+': okänt').join("  |  ")}
-function plSaveDraft(){const d=plDraft();d.dirty=true;store.set("pl:"+planKeyOf(),JSON.stringify(d))}
+function plSaveDraft(){const d=plDraft();if(!d.dirty){const b=S.plans[planKeyOf()];d.baseUpd=b?b.updated:null}d.dirty=true;store.set("pl:"+planKeyOf(),JSON.stringify(d))}
 function plPlace(id){return (S.bundle.places||[]).find(p=>p.id===id)}
 function plStrip(p){return {name:p.name,street:p.street,zip:p.zip,city:p.city}}
 function plOpts(sel){const ps=S.bundle.places||[];const g=(k,l)=>'<optgroup label="'+l+'">'+ps.filter(p=>p.kind===k).map(p=>'<option value="'+esc(p.id)+'"'+(p.id===sel?' selected':'')+'>'+esc(p.name)+'</option>').join("")+'</optgroup>';return '<option value="">Välj plats</option>'+g("fyll","Påfyllning")+g("station","Stationer")}
@@ -783,7 +786,7 @@ async function plMoveDay(from,to){
 async function plSend(retract){
   const D=plDraft(),car=planCar();readPl();
   const out=Object.assign({},D,{legs:retract?[]:D.legs,updated:new Date().toISOString(),company:S.bundle.company||"Småländska Bränslen AB",dDate:S.pl.date});
-  try{await ghPlanPut(car.dir,S.pl.date,out);S.plans[planKeyOf()]=out;D.sent=retract?null:out.updated;D.dirty=false;if(retract)D.legs=D.legs;store.set("pl:"+planKeyOf(),JSON.stringify(D));
+  try{await ghPlanPut(car.dir,S.pl.date,out);S.plans[planKeyOf()]=out;D.sent=retract?null:out.updated;D.dirty=false;D.baseUpd=out.updated;if(retract)D.legs=D.legs;store.set("pl:"+planKeyOf(),JSON.stringify(D));
     const c=S.bundle.cars.find(x=>x.dir===car.dir);if(c){if(retract)delete c.days[S.pl.date];else c.days[S.pl.date]=ovDay(out)}
     toast(retract?"Rutten är tillbakatagen.":"Utskickad till "+((D.driver||"").split(" ")[0]||"bilen")+".")}
   catch(e){toast("Kunde inte skicka. Kontrollera nätet och försök igen.")}
