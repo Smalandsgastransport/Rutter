@@ -680,7 +680,7 @@ function planToRoute(p){const f=(p.driver||"").split(" ")[0]||"Chauffor";return 
 async function fetchPlans(dir,minDate){
   const list=await ghPlanList(dir),idxKey="planidx:"+dir;let names;
   if(list===null){try{names=JSON.parse(store.get(idxKey)||"[]")}catch(e){names=[]};}
-  else{names=list.map(x=>x.name).filter(n=>/^\d{4}-\d{2}-\d{2}\.json$/.test(n)&&planDate(n)>=minDate);store.set(idxKey,JSON.stringify(names))}
+  else{(S.planOk=S.planOk||{})[dir]=true;names=list.map(x=>x.name).filter(n=>/^\d{4}-\d{2}-\d{2}\.json$/.test(n)&&planDate(n)>=minDate);store.set(idxKey,JSON.stringify(names))}
   const out={};
   for(const n of names){const d=planDate(n),k=dir+"|"+d,sh=list&&list.find(x=>x.name===n);
     try{
@@ -696,13 +696,16 @@ async function loadPlansDriver(){
     if(!p.legs||!p.legs.length){delete S.bundle.days[d];continue}
     S.bundle.days[d]=planToRoute(p);
   }
+  /* när rutt-status svarat är det planerna som gäller: en inbyggd (gammal) rutt får aldrig dyka upp igen om planen är tom/borttagen */
+  if(S.planOk&&S.planOk[S.bundle.dir])for(const d of Object.keys(S.bundle.days)){if(!(ps[d]&&ps[d].legs&&ps[d].legs.length))delete S.bundle.days[d]}
   pickDate();S.pl0=true;
 }
 async function loadPlansAdmin(){
   if(!S.bundle||S.bundle.role!=="admin"||!S.bundle.planKey)return;
   for(const pc of (S.bundle.planCars||[])){if(!pc.dir)continue;
     const ps=await fetchPlans(pc.dir,"2020-01-01"),c=S.bundle.cars.find(x=>x.dir===pc.dir);if(!c)continue;
-    for(const d of Object.keys(ps)){if(ps[d].legs&&ps[d].legs.length)c.days[d]=ovDay(ps[d]);else delete c.days[d]}}
+    for(const d of Object.keys(ps)){if(ps[d].legs&&ps[d].legs.length)c.days[d]=ovDay(ps[d]);else delete c.days[d]}
+    if(S.planOk&&S.planOk[pc.dir])for(const d of Object.keys(c.days)){if(!(ps[d]&&ps[d].legs&&ps[d].legs.length))delete c.days[d]}}
 }
 const planCar=()=>(S.bundle.planCars||[]).find(c=>c.id===S.pl.car)||{};
 const planKeyOf=()=>planCar().dir+"|"+S.pl.date;
