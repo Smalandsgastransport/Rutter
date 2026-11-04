@@ -814,6 +814,12 @@ const notisUnread=(dir,date)=>{const rd=notisReads(dir,date);return notisAll(dir
 async function notisMark(dir,date,ref,svar){const st=S.bundle.status,name=Date.now()+"_dag_notislast.json",data={typ:"notislast",ref,svar:svar||""};
   const r=await fetch(GH+st.repo+"/contents/status/"+date+"/"+dir+"/"+name,{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify({message:pm(dir),content:btoa(unescape(encodeURIComponent(JSON.stringify(data))))})});
   if(!r.ok)throw new Error("put");(S.server[dir+"|"+date]=S.server[dir+"|"+date]||[]).push(name);S.nyData[name]=data}
+
+/* Kontoret tar bort en transport som föraren lagt till själv (syns i Översikt men inte i Planering) */
+async function admDelLeg(dir,date,order){const st=S.bundle.status,name=Date.now()+"_"+order+"_raderad.json",c=(S.bundle.planCars||[]).find(x=>x.dir===dir)||{};
+  const data={typ:"raderad",order,datum:date,tid:new Date().toISOString(),bil:c.name||"",forare:"",av:"kontoret"};
+  const r=await fetch(GH+st.repo+"/contents/status/"+date+"/"+dir+"/"+name,{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify({message:pm(dir),content:btoa(unescape(encodeURIComponent(JSON.stringify(data))))})});
+  if(!r.ok)throw new Error("put");(S.server[dir+"|"+date]=S.server[dir+"|"+date]||[]).push(name);S.nyData[name]=data}
 function notisCard(date){
   const rows=[];(S.bundle.planCars||[]).forEach(c=>notisAll(c.dir,date).forEach(n=>rows.push({c,n})));rows.sort((a,b)=>a.n.ts-b.n.ts);
   if(!rows.length)return "";
@@ -1557,7 +1563,7 @@ function renderAdmin(){
     const nU=act.filter(l=>st.get(l.order+"|lossad")).length,pct=act.length?Math.round(100*nU/act.length):0;
     h+='<div class="card ov-car"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline"><h3 style="font-size:20px">'+esc(c.name)+(d.driver?' · '+esc(d.driver.split(" ")[0]):'')+'</h3>'+(d.self?'<span class="tag" style="background:var(--blue-soft);color:var(--blue)">Förarens egen bokning</span>':'')+(g?'<span class="done">✓ Godkänd '+esc(hhmm(g.ts))+'</span>':'<span class="done wait">Inte godkänd</span>')+'</div>'+
       '<div class="muted" style="font-size:14px">'+nU+' av '+act.length+' lossade</div><div class="bar"><i style="width:'+pct+'%"></i></div>'+
-      legs.map(l=>{const L=st.get(l.order+"|lastad"),U=st.get(l.order+"|lossad");return '<div class="ov-row"'+(l.deleted?' style="opacity:.55"':'')+'><span class="n" style="font-size:17px">'+String(l.pos).padStart(2,"0")+'</span><span class="r"'+(l.deleted?' style="text-decoration:line-through"':'')+'>'+(l.isNew?'<span class="pill p-del">Ny</span> ':'')+esc(l.from.name)+' → '+esc(l.to.name)+' <span class="muted">('+esc((LOADS[l.load]||l.load).toLowerCase())+(l.antal>1?', antal '+l.antal:'')+')</span>'+(l.deleted?' <b>raderad '+esc(hhmm(l.deleted.ts))+'</b>':'')+'</span><span class="ov-st"><span class="tag'+(L?' on':'')+'">'+(L?'Lastad '+esc(hhmm(L.ts))+(l.flakInfo?' · Flak '+esc(l.flakInfo):''):'Ej lastad')+'</span><span class="tag'+(U?' on':'')+'">'+(U?'Lossad '+esc(hhmm(U.ts)):'Ej lossad')+'</span></span></div>'}).join("")+'</div>'});
+      legs.map(l=>{const L=st.get(l.order+"|lastad"),U=st.get(l.order+"|lossad");return '<div class="ov-row"'+(l.deleted?' style="opacity:.55"':'')+'><span class="n" style="font-size:17px">'+String(l.pos).padStart(2,"0")+'</span><span class="r"'+(l.deleted?' style="text-decoration:line-through"':'')+'>'+(l.isNew?'<span class="pill p-del">Ny</span> ':'')+esc(l.from.name)+' → '+esc(l.to.name)+' <span class="muted">('+esc((LOADS[l.load]||l.load).toLowerCase())+(l.antal>1?', antal '+l.antal:'')+')</span>'+(l.deleted?' <b>raderad '+esc(hhmm(l.deleted.ts))+'</b>':(l.isNew?' <button class="btn link" data-admdel="'+esc(c.dir+'|'+S.date+'|'+l.order)+'">'+(S.admDelArm===c.dir+'|'+S.date+'|'+l.order?'Tryck igen för att ta bort':'Ta bort')+'</button>':''))+'</span><span class="ov-st"><span class="tag'+(L?' on':'')+'">'+(L?'Lastad '+esc(hhmm(L.ts))+(l.flakInfo?' · Flak '+esc(l.flakInfo):''):'Ej lastad')+'</span><span class="tag'+(U?' on':'')+'">'+(U?'Lossad '+esc(hhmm(U.ts)):'Ej lossad')+'</span></span></div>'}).join("")+'</div>'});
   return h+'</div><p class="muted" style="font-size:13.5px">Uppdateras varje minut.</p>';
 }
 function render(){
@@ -1657,6 +1663,8 @@ document.addEventListener("click",async e=>{
     if(F.idx!=null){Object.assign(D.legs[F.idx],leg)}
     else{const pre=S.pl.date.slice(2).replace(/-/g,"")+"-B"+String(S.pl.car).replace(/\D/g,"")+"-";leg.order=pre+String(D.next||D.legs.length+1).padStart(2,"0");D.next=(D.next||D.legs.length+1)+1;D.legs.push(leg)}
     S.pl.form=null;plSaveDraft();render();return}
+  if(t.dataset.admdel){const k=t.dataset.admdel;if(S.admDelArm!==k){S.admDelArm=k;render();return}S.admDelArm=null;const [dir,date,order]=k.split("|");
+    try{await admDelLeg(dir,date,order);toast("Transporten är borttagen.")}catch(e){toast("Kunde inte ta bort. Kontrollera nätet och försök igen.")}render();return}
   if(t.dataset.mvopen){S.pl.mv={to:today()===S.pl.date?iso(new Date(Date.now()+864e5)):today(),err:"",busy:false};render();return}
   if(t.dataset.mvcancel){S.pl.mv=null;render();return}
   if(t.dataset.mvgo){const mv=S.pl.mv;if(!mv||mv.busy)return;const to=(document.getElementById("mvTo")||{}).value||mv.to;mv.to=to;mv.busy=true;mv.err="";render();
