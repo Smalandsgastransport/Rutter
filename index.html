@@ -1043,7 +1043,10 @@ async function loadFlak(){
   try{const st=S.bundle.status,r=await fetch(GH+st.repo+"/contents/"+FKP+"?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});
     if(r.status===404){S.fk.loc={};S.fk.sha=null;S.fk.ok=true;S.fk.st={ok:true,ts:Date.now(),empty:true};return true}
     if(!r.ok){let det="";try{det=((await r.json()).message||"").slice(0,160)}catch(e){}S.fk.st={ok:false,msg:"Servern svarade "+r.status+" vid hämtning"+(det?" ("+det+")":"")};throw 0}
-    const j=await r.json(),c=j.content.replace(/\n/g,"");S.fk.sha=j.sha;S.fk.loc=await openPlan(unb64(c));S.fk.clear=S.fk.loc._clear||0;delete S.fk.loc._clear;S.fk.ok=true;store.set("flak",c);S.fk.st={ok:true,ts:Date.now()};return true}
+    const j=await r.json(),c=j.content.replace(/\n/g,"");S.fk.sha=j.sha;
+    try{S.fk.loc=await openPlan(unb64(c));S.fk.clear=S.fk.loc._clear||0;delete S.fk.loc._clear;store.set("flak",c)}
+    catch(de){if(S.bundle.role!=="admin")throw de;/* filen går inte att läsa (skadad/annan nyckel): börja om med en tom lista – nästa sparning ersätter den */S.fk.loc={};S.fk.clear=Date.now();S.fk.healed=true;store.set("flak",null)}
+    S.fk.ok=true;S.fk.st={ok:true,ts:Date.now()};return true}
   catch(e){if(!S.fk.st||S.fk.st.ok)S.fk.st={ok:false,msg:"Kunde inte läsa listan ("+((e&&e.name)||"nätverk")+")"};const c=store.get("flak");if(c&&!S.fk.ok){try{S.fk.loc=await openPlan(unb64(c));S.fk.clear=S.fk.loc._clear||0;delete S.fk.loc._clear}catch(x){}}return false}}
 async function saveFlak(mut){
   for(let i=0;i<4;i++){
