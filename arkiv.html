@@ -386,7 +386,7 @@ async function afterLoad(force){
   ensurePush();loadFlak().then(()=>flushFlak()).then(()=>render()).catch(()=>{});loadPers().then(()=>render()).catch(()=>{});ejFlush().catch(()=>{});
   if(S.bundle.role==='admin'){await loadPlansAdmin();await loadNotes();await loadPauser();await loadSwaps();await loadLedig();await loadFel();await loadHamt();await loadStat();if(S.view==='ark')arLoad().then(()=>render());
     const ds=[...new Set([today(),iso(new Date(Date.now()+864e5)),S.pl.date||today(),S.date].filter(Boolean))];
-    await Promise.all((S.bundle.planCars||[]).filter(c=>c.dir).map(async c=>{for(const d of (S.view==='paus'?[...new Set(ds.concat(pausDays()))]:ds)){await ghList(c.dir,d);await fetchNy(c.dir,d)}}))}
+    await Promise.all((S.bundle.planCars||[]).filter(c=>c.dir).map(async c=>{for(const d of (S.view==='paus'?[...new Set(ds.concat(pausDays()))]:ds)){await ghList(c.dir,d);await fetchNy(c.dir,d)}}));await flakSyncFromEvents()}
   else if(S.bundle.role==='driver'){await loadPlansDriver();await loadNotes();await loadPauser();await loadSwaps();await loadLedig();await loadFel();await loadHamt();await loadPeerPlans();if(!S.dk.hlast||Date.now()-S.dk.hlast>3e5){S.dk.hlast=Date.now();dkHist().then(()=>render())}for(const d of [today(),iso(new Date(Date.now()-864e5))]){await ghList(S.bundle.dir,d);await fetchNy(S.bundle.dir,d)}}
   if(isOv()){const all=S.bundle.role==="ekonomi"||S.view==="sum";await Promise.all(S.bundle.cars.map(async c=>{for(const d of (all?Object.keys(c.days):(S.date?[S.date]:[]))){await ghList(c.dir,d);await fetchNy(c.dir,d)}}));return}
   await sync();if(S.date){await ghList(S.bundle.dir,S.date);await fetchNy(S.bundle.dir,S.date)}
@@ -1042,7 +1042,7 @@ async function loadFlak(){
   if(!S.bundle||!S.bundle.planKey||!S.bundle.status){S.fk.st={ok:false,msg:"Appen saknar åtkomst till flaklistan."};return false}
   try{const st=S.bundle.status,r=await fetch(GH+st.repo+"/contents/"+FKP+"?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});
     if(r.status===404){S.fk.loc={};S.fk.sha=null;S.fk.ok=true;S.fk.st={ok:true,ts:Date.now(),empty:true};return true}
-    if(!r.ok){S.fk.st={ok:false,msg:"Servern svarade "+r.status};throw 0}
+    if(!r.ok){let det="";try{det=((await r.json()).message||"").slice(0,160)}catch(e){}S.fk.st={ok:false,msg:"Servern svarade "+r.status+" vid hämtning"+(det?" ("+det+")":"")};throw 0}
     const j=await r.json(),c=j.content.replace(/\n/g,"");S.fk.sha=j.sha;S.fk.loc=await openPlan(unb64(c));S.fk.ok=true;store.set("flak",c);S.fk.st={ok:true,ts:Date.now()};return true}
   catch(e){if(!S.fk.st||S.fk.st.ok)S.fk.st={ok:false,msg:"Kunde inte läsa listan ("+((e&&e.name)||"nätverk")+")"};const c=store.get("flak");if(c&&!S.fk.ok){try{S.fk.loc=await openPlan(unb64(c))}catch(x){}}return false}}
 async function saveFlak(mut){
@@ -1052,8 +1052,10 @@ async function saveFlak(mut){
     const st=S.bundle.status,body={message:pm("all"),content:b64(await sealPlan(S.fk.loc))};if(S.fk.sha)body.sha=S.fk.sha;
     const r=await fetch(GH+st.repo+"/contents/"+FKP,{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify(body)});
     if(r.ok){S.fk.sha=(await r.json()).content.sha;S.fk.st={ok:true,ts:Date.now()};try{store.set("flak",b64(await sealPlan(S.fk.loc)))}catch(e){}return}
-    if(r.status!==409&&r.status!==422)throw new Error("Servern svarade "+r.status+" vid sparande")}
-  throw new Error("Konflikt – försök igen")}
+    let det="";try{det=((await r.json()).message||"").slice(0,160)}catch(e){}
+    if(r.status!==409&&r.status!==422)throw new Error("Servern svarade "+r.status+" vid sparande"+(det?" ("+det+")":""));
+    S.fk.last409=r.status+" "+det}
+  throw new Error("Konflikt "+(S.fk.last409||"")+" – försök igen")}
 const fkQ=()=>{try{return JSON.parse(store.get("fkq")||"[]")}catch(e){return []}};
 async function flakMove(items){
   if(items&&items.length){const q=fkQ().concat(items);store.set("fkq",JSON.stringify(q));items.forEach(x=>{if(x.v)S.fk.loc[x.nr]=x.v;else delete S.fk.loc[x.nr]})}
@@ -1070,7 +1072,7 @@ function gehabWarn(nrs){const g=nrs.filter(isGehab);if(!g.length)return "";retur
 function renderFlak(){
   const B=S.bundle,V=S.fkv,places=(B.places||[]),loc=S.fk.loc||{},all=Object.keys(loc);
   const fst=S.fk.st,stl=fst?(fst.ok?'<span class="muted" style="font-size:13px">Listan hämtad '+esc(hhmm(new Date(fst.ts).toISOString()))+(fst.empty?' (tom)':'')+'</span>':'<span style="color:#d03a3a;font-size:13px">⚠ '+esc(fst.msg)+'</span>'):'';
-  let h='<div class="pagehead"><h2>Flak</h2><p class="muted">Var varje flak står just nu. Uppdateras av förarna när de lastar och lossar. Gehab-flak ('+GEHAB.join(", ")+') får bara åka på bilen, inte på släpet. '+stl+(fkQ().length?' <b style="color:#d03a3a">'+fkQ().length+' ändringar väntar på att sparas.</b> <button class="btn small" data-fk="retry">Försök spara igen</button>':'')+'</p></div>';
+  let h='<div class="pagehead"><h2>Flak</h2><p class="muted">Var varje flak står just nu. Uppdateras av förarna när de lastar och lossar. Gehab-flak ('+GEHAB.join(", ")+') får bara åka på bilen, inte på släpet. '+stl+(fkQ().length?' <b style="color:#d03a3a">'+fkQ().length+' ändringar väntar på att sparas.'+(S.fk.err?' Senaste fel: '+esc(S.fk.err):'')+'</b> <button class="btn small" data-fk="retry">Försök spara igen</button>':'')+'</p></div>';
   const sel='style="font:inherit;font-size:16px;padding:8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg)"';
   h+='<div class="card" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end"><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Flaknummer (ett eller flera, t.ex. 158, 145)<input id="fkNr" value="'+esc(V.nr)+'" '+sel+'></label><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Står på<select id="fkTo" '+sel+'>'+plOpts(V.to)+'</select></label><button class="btn go" data-fk="set">Flytta hit</button><button class="btn" data-fk="del">Ta bort flak ur listan</button></div>'+(V.msg?'<div class="notice">'+esc(V.msg)+'</div>':'');
   const gl=GEHAB.filter(n=>true);
@@ -1261,6 +1263,19 @@ document.addEventListener("click",async e=>{const t=e.target.closest("[data-pe]"
   if(a==="save"){const F=P.f;if(!F)return;F.namn=(F.namn||"").trim();if(!F.namn){F.err="Skriv ett namn.";render();return}
     const rec={id:F.id||"p"+Math.random().toString(36).slice(2,9),namn:F.namn,roll:F.roll,tel:(F.tel||"").trim(),mail:(F.mail||"").trim(),bil:F.bil,adr:F.adr,kort:F.kort,not:(F.not||"").trim(),akt:!!F.akt};
     t.disabled=true;try{await savePers(l=>{const i=l.findIndex(y=>y.id===rec.id);if(i>=0)l[i]=rec;else l.push(rec)});P.f=null;P.msg="✓ Sparat: "+rec.namn+"."}catch(err){F.err="Kunde inte spara: "+err.message;t.disabled=false}render();return}});
+/* flaken registreras även från dagens körningar (lastad/lossad), så listan fylls av sig själv */
+function flakDerive(){const out={};
+  (S.bundle.planCars||[]).forEach(pc=>{if(!pc.dir)return;
+    Object.keys(S.plans).forEach(k=>{if(k.indexOf(pc.dir+"|")!==0)return;const d=k.slice(pc.dir.length+1);if(d<START)return;const p=S.plans[k];if(!p||!p.legs||!p.legs.length)return;
+      const st=statesFor(pc.dir,d);
+      allLegs(pc.dir,d,planToRoute(p).legs).forEach(l=>{if(l.deleted)return;const e=st.get(l.order+"|lastad"),f=lastFlak(e);if(!f)return;const U=st.get(l.order+"|lossad");
+        const ts=U?U.ts:e.ts,v=U?{p:l.to.name,ts,by:pc.name||"bil"}:{car:pc.name||"bil",from:l.from.name,ts};
+        f.forEach(x=>{const nr=flNr(x.nr);if(nr&&(!out[nr]||out[nr].ts<ts))out[nr]=v})})})});
+  return out}
+async function flakSyncFromEvents(){
+  try{await loadFlak();const dv=flakDerive(),items=[];
+    Object.keys(dv).forEach(nr=>{const cur=(S.fk.loc||{})[nr];if(!cur||(cur.ts||0)<dv[nr].ts)items.push({nr,v:dv[nr]})});
+    if(items.length)await flakMove(items);render()}catch(e){}}
 /* ---------- Felanmälan / verkstad med bilder ---------- */
 const FT={station:"Fel på mack",fel:"Fel på bilen",slap:"Fel på släp / flak",skada:"Skada / olycka",verk:"Behöver verkstad",annat:"Annat"};
 const FA={snart:["Bör åtgärdas snart","p-warn"],kan:["Kan köra som vanligt","p-type"],ej:["Kan inte köra","p-warn"]};
