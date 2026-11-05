@@ -921,13 +921,17 @@ document.addEventListener("click",async e=>{
   if(a==="close"){dkClose();return}
   if(a==="back"){const o=document.getElementById("dkview");o.querySelector("#dkf").style.display="none";o.querySelector("#dkl").style.display="flex";return}
   if(a==="show"){const o=document.getElementById("dkview"),x=o._e[+t.dataset.i];if(!x||!x.blob){toast("Deklarationen kunde inte skapas.");return}
+    if(pdfFull(x.blob))return;
     const u=URL.createObjectURL(x.blob),F=o.querySelector("#dkf");o.querySelector("#dkl").style.display="none";F.style.display="flex";
     F.innerHTML='<div style="display:flex;gap:8px"><button class="btn" data-dk="back">‹ Alla</button><a class="btn" href="'+u+'" target="_blank" style="text-decoration:none">Öppna i helskärm</a></div><iframe data-u="'+u+'" src="'+u+'" style="flex:1;min-height:70vh;border:0;background:#fff;border-radius:4px"></iframe>'}
 });
 function dkBadge(){const n=S.dk.n,t=S.dk.total;if(!t)return "";return '<p class="'+(n>=t?"":"warn ")+'muted" style="margin:0;font-size:14px">'+(n>=t?'✓ Alla '+t+' deklarationer är sparade på den här enheten och fungerar utan nät.':'Sparar deklarationer på enheten… '+n+' av '+t)+'</p>'}
 
 /* ---------- Arkiv per bil (förare) och alla bilar (kontoret) ---------- */
-function pdfOverlay(blob,name,extra){
+/* Android/surfplatta kan inte visa PDF i en ruta: öppna direkt i helskärm i stället */
+function pdfFull(blob){if(!(/Android/i.test(navigator.userAgent)||navigator.pdfViewerEnabled===false))return false;
+  try{const u=URL.createObjectURL(blob),w=window.open(u,"_blank");if(w){setTimeout(()=>URL.revokeObjectURL(u),120000);return true}URL.revokeObjectURL(u)}catch(e){}return false}
+function pdfOverlay(blob,name,extra){if(pdfFull(blob))return;
   const old=document.getElementById("pdfov");if(old){old.querySelectorAll("[data-u]").forEach(x=>URL.revokeObjectURL(x.dataset.u));old.remove()}
   const u=URL.createObjectURL(blob),o=document.createElement("div");o.id="pdfov";o.style.cssText="position:fixed;inset:0;z-index:70;background:var(--bg);display:flex;flex-direction:column;padding:12px;gap:8px";
   o.innerHTML='<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap"><b>'+esc(name)+'</b><span class="acts"><a class="btn" href="'+u+'" target="_blank" style="text-decoration:none">Öppna i helskärm</a><a class="btn" href="'+u+'" download="'+esc(name)+'" style="text-decoration:none">Spara</a><button class="btn" data-pv="close">Stäng</button></span></div><iframe data-u="'+u+'" src="'+u+'" style="flex:1;border:0;background:#fff;border-radius:4px"></iframe>';
@@ -1843,7 +1847,7 @@ function render(){
     '<div class="route"><div><span class="k">Hämta</span><b>'+esc(l.from.name)+'</b><span>'+esc(l.from.street)+', '+esc(l.from.zip)+' '+esc(l.from.city)+'</span></div><div class="arrow" aria-hidden="true">→</div><div><span class="k">Lämna</span><b>'+esc(l.to.name)+'</b><span>'+esc(l.to.street)+', '+esc(l.to.zip)+' '+esc(l.to.city)+'</span></div></div>'+
     (l.note?'<div class="note">'+esc(l.note)+'</div>':'')+
     legActs(st,l,!!g)+
-    '<div class="acts">'+(l.isNew||l.gen||l.local?'<button class="btn small" data-savenew="'+esc(l.order)+'">Spara deklaration</button>':'<button class="btn small" data-save="'+esc(l.pdf)+'" data-name="'+esc(l.pdfName)+'">Spara deklaration</button>')+
+    '<div class="acts">'+'<button class="btn small" data-openleg="'+esc(l.order)+'">Öppna deklaration</button>'+
       (S.confirmDel===l.order?'<span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span style="font-weight:600">Radera transport '+String(l.pos).padStart(2,"0")+'?</span><button class="btn small" style="background:var(--adr);border-color:var(--adr);color:#fff" data-del="'+esc(l.order)+'">Radera</button><button class="btn small" data-delcancel="1">Avbryt</button></span>':'<button class="btn link" data-delask="'+esc(l.order)+'">Radera</button>')+'</div></div>').join("")+'</div>'+
     (r.date>=today()?'<div style="margin-top:12px">'+newFormHtml(r)+'</div>':'');
   h+='<div style="margin-top:12px">'+swapForm(r)+'</div><div style="margin-top:12px">'+notisForm()+'</div>'+hamtCard()+felCard()+arkCard()+ledCard();
@@ -1962,6 +1966,7 @@ document.addEventListener("click",async e=>{
   if(t.dataset.delask){readForm();S.confirmDel=t.dataset.delask;render();return}
   if(t.dataset.delcancel){S.confirmDel=null;render();return}
   if(t.dataset.del){S.confirmDel=null;await record("raderad",t.dataset.del);toast("Transporten är raderad.");return}
+  if(t.dataset.openleg){const r=route();const l=r&&allLegs(S.bundle.dir,r.date,r.legs).find(x=>x.order===t.dataset.openleg);if(l){t.disabled=true;try{let bl=null;try{const e=await dkKv(S.bundle.dir+"|"+r.date+"|"+l.order);if(e&&e.sig===dkSig(l,r))bl=e.blob}catch(x){}if(!bl)bl=await makePdf([l],r);pdfOverlay(bl,l.order+".pdf")}catch(err){toast("Kunde inte skapa PDF:en.")}t.disabled=false}return}
   if(t.dataset.savenew){const r=route();const l=allLegs(S.bundle.dir,r.date,r.legs).find(x=>x.order===t.dataset.savenew);if(l){t.disabled=true;try{await shareBlob(await makePdf([l],r),l.order+".pdf")}catch(err){toast("Kunde inte skapa PDF:en.")}t.disabled=false}return}
   if(t.dataset.saveall){const r=route();const ls=allLegs(S.bundle.dir,r.date,r.legs).filter(l=>!l.deleted);t.disabled=true;try{await shareBlob(await makePdf(ls,r),r.allPdfName)}catch(err){toast("Kunde inte skapa PDF:en.")}t.disabled=false;return}
   if(t.dataset.undo){await record("angra-"+t.dataset.undo,t.dataset.order);toast("Ångrat.");return}
