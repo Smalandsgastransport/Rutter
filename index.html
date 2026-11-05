@@ -953,12 +953,13 @@ async function dkHist(){
         if(!idx[key]||idx[key].sig!==sg){try{await dkKv(key,{sig:sg,blob:await dkBlob(l,r)})}catch(e){continue}}
         idx[key]={date:d,order:l.order,from:l.from.name,to:l.to.name,load:l.load,antal:l.antal,mangd:l.mangd,kg:l.kg||null,sig:sg}}}
     store.set("dkarch:"+dir,JSON.stringify(idx))}catch(e){}
-  finally{S.dk.hbusy=false}}
+  finally{S.dk.hbusy=false;try{const c=dkCount(),o=store.get("dkn:"+S.bundle.dir);S.dk.fresh=true;store.set("dkn:"+S.bundle.dir,String(c));if(String(c)!==o)render()}catch(e){}}}
 function dagslutE(dir,date){return statesFor(dir,date).get('dag|dagslut')||null}
 function dagslutBtn(){const e=dagslutE(S.bundle.dir,today());return e?'<span class="pill p-full">Dagen avslutad '+esc(hhmm(e.ts))+'</span>':'<button class="btn go" data-dk="dagslut">Avsluta dagen och skicka in godsdeklarationer</button>'}
+function dkCount(){const dir0=S.bundle.dir,idx0=dkIdx();return Object.keys(idx0).filter(k=>DL(k).st!=="ok"&&!(kordGet(dir0,idx0[k].date,idx0[k].order)===false&&lockGet(dir0,idx0[k].date,idx0[k].order))).length}
 function arkCard(){return arkCard0()+flakCard()}
 function arkCard0(){
-  if(!(S.bundle&&S.bundle.role==="driver"))return "";const dir0=S.bundle.dir,idx0=dkIdx(),n=Object.keys(idx0).filter(k=>DL(k).st!=="ok"&&!(kordGet(dir0,idx0[k].date,idx0[k].order)===false&&lockGet(dir0,idx0[k].date,idx0[k].order))).length;
+  if(!(S.bundle&&S.bundle.role==="driver"))return "";const n=S.dk.fresh?dkCount():(+store.get("dkn:"+S.bundle.dir)||dkCount());
   return '<div class="card" style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div><b>Mina körda deklarationer</b><div class="muted" style="font-size:14px">'+n+' sparade på den här enheten</div></div><span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-dk="arch">Öppna arkivet</button>'+dagslutBtn()+'</span></div>'}
 /* radera ur förarens arkiv: före 5 nov direkt, annars kräver det godkännande av kontoret (sparas alltid hos kontoret) */
 const DLP="plan/_radera/all.json";S.dl={d:{},sha:null,ok:false};
@@ -2109,7 +2110,7 @@ function renderSum(){
    sec("Körningar med släp (appen)",O.trl.length?tbl(["Dag","Bil","Släp","Körn."],O.trl):'<p class="muted" style="margin:0">Inga.</p>')+
    sec("Rapporterat i appen per dag",tbl(["Datum","Bil","Förare","Släp","Körn.","Lossade","kg"],O.perDag.sort((a,b)=>a[0]<b[0]?1:-1))):"");
 }
-function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v82</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v82 – skicka den här texten till mig.</div>'}}
+function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v83</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v83 – skicka den här texten till mig.</div>'}}
 function renderAdmin(){
   const ds=days(),B=S.bundle;let h='<div class="pagehead"><h2>Översikt</h2><p class="muted">Dagens körningar, status från förarna och aviseringar.</p></div>';
   {const D=S.date||today(),cs=B.cars.filter(c=>c.days[D]);let nL=0,nU=0,nG=0;cs.forEach(c=>{const st=statesFor(c.dir,D);if(st.get("dag|godkand"))nG++;allLegs(c.dir,D,c.days[D].legs.map(l=>Object.assign({},l,{from:{name:l.from},to:{name:l.to}}))).filter(l=>!l.deleted).forEach(l=>{nL++;if(st.get(l.order+"|lossad"))nU++})});
