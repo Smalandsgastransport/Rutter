@@ -383,7 +383,7 @@ async function afterLoad(force){
   if(window.ARKIV)return akLoad();
   if(force!==true&&S.lastDay===today()&&!(await repoHead())){if(S.bundle.role==="driver"&&pendingCount())await sync();return}
   S.lastDay=today();S.fresh=true;
-  ensurePush();gpsInit();if(S.bundle.role==="admin"&&S.view==="map")loadPos().then(()=>render());loadFlak().then(()=>flushFlak()).then(()=>render()).catch(()=>{});loadPers().then(()=>render()).catch(()=>{});ejFlush().catch(()=>{});
+  ensurePush();gpsInit();if(S.bundle.role==="admin"&&S.view==="map")loadPos().then(()=>render());loadFlak().then(()=>flushFlak()).then(()=>render()).catch(()=>{});loadPers().then(()=>render()).catch(()=>{});ejFlush().catch(()=>{});if(S.bundle.role==='admin')delLoad().then(()=>render()).catch(()=>{});loadXP().then(()=>render()).catch(()=>{});
   if(S.bundle.role==='admin'){await loadPlansAdmin();await loadNotes();await loadPauser();await loadSwaps();await loadLedig();await loadFel();await loadHamt();await loadStat();if(S.view==='ark')arLoad().then(()=>render());
     const ds=[...new Set([today(),iso(new Date(Date.now()+864e5)),S.pl.date||today(),S.date].filter(Boolean))];
     await Promise.all((S.bundle.planCars||[]).filter(c=>c.dir).map(async c=>{for(const d of (S.view==='paus'?[...new Set(ds.concat(pausDays()))]:ds)){await ghList(c.dir,d);await fetchNy(c.dir,d)}}));await flakSyncFromEvents()}
@@ -1477,6 +1477,29 @@ function kmEst(legs,base){
   if(!legs.length)return "";
   const hm=m=>Math.floor(m/60)+" h "+String(m%60).padStart(2,"0")+" min";
   return '<div class="muted" style="font-size:14px;border-top:1px solid var(--line);padding-top:8px"><b>Uppskattad körsträcka:</b> '+(miss||S.kmWant.size?(km?'ca '+Math.round(km)+' km hittills – beräknar resten…':'beräknar…'):'ca '+Math.round(km)+' km · ca '+hm(min)+' körtid')+(unk?' <span title="Adresser som inte finns i adresslistan räknas inte">('+unk+' transport(er) utan känd adress)</span>':'')+'<br><span style="font-size:12px">Från hämtning till lossning och mellan transporterna, exkl. start/slut från bilens bas, raster och lastning. Beräknat för personbil – tung bil kan ta något längre.</span></div>'}
+/* egna adresser som kontoret lägger till (visas hos alla, även på kartan) */
+const XPP="plan/_places/all.json";S.xp=[];S.xpSha=null;S.xf=null;
+async function loadXP(){if(!S.bundle||!S.bundle.planKey||!S.bundle.status)return;
+  if(!S.basePlaces)S.basePlaces=(S.bundle.places||[]).slice();
+  try{const st=S.bundle.status,r=await fetch(GH+st.repo+"/contents/"+XPP+"?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});
+    if(r.status===404){S.xp=[];S.xpSha=null}else if(r.ok){const j=await r.json();S.xpSha=j.sha;const c=j.content.replace(/\n/g,"");S.xp=await openPlan(unb64(c));store.set("xp",c)}else throw 0}
+  catch(e){const c=store.get("xp");if(c&&!S.xp.length){try{S.xp=await openPlan(unb64(c))}catch(x){}}}
+  xpApply()}
+function xpApply(){if(!S.basePlaces)return;const ids=new Set(S.basePlaces.map(p=>p.id));S.bundle.places=S.basePlaces.concat((S.xp||[]).filter(p=>!ids.has(p.id)))}
+async function xpSave(mut){const st=S.bundle.status;
+  for(let i=0;i<4;i++){await loadXP();mut(S.xp);const body={message:pm("all"),content:b64(await sealPlan(S.xp))};if(S.xpSha)body.sha=S.xpSha;
+    const r=await fetch(GH+st.repo+"/contents/"+XPP,{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify(body)});
+    if(r.ok){S.xpSha=(await r.json()).content.sha;xpApply();return}if(r.status!==409&&r.status!==422)throw new Error("Servern svarade "+r.status)}
+  throw new Error("Konflikt – försök igen")}
+function xpCard(){const F=S.xf,inp='style="font:inherit;font-size:15px;padding:8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg)"';
+  return '<div class="card" style="margin-top:12px"><b>Lägg till adress</b><div class="muted" style="font-size:13px">T.ex. en ny mack. Hamnar i adresslistan, på kartan och i förarnas val av plats.</div>'+
+   '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><input id="xpN" placeholder="Namn (t.ex. Älmhult)" value="'+esc((F||{}).n||"")+'" '+inp+'><input id="xpS" placeholder="Gatuadress" value="'+esc((F||{}).s||"")+'" '+inp+'><input id="xpZ" placeholder="Postnr" size="7" value="'+esc((F||{}).z||"")+'" '+inp+'><input id="xpC" placeholder="Ort" value="'+esc((F||{}).c||"")+'" '+inp+'><select id="xpK" '+inp+'><option value="station">Station</option><option value="fyll"'+((F||{}).k==="fyll"?' selected':'')+'>Påfyllning</option></select><button class="btn go small" data-xp="add">Lägg till</button></div>'+((F||{}).err?'<div class="notice warn" style="margin-top:6px">'+esc(F.err)+'</div>':'')+
+   ((S.xp||[]).length?'<div style="margin-top:8px">'+S.xp.map(p=>'<div class="nrow"><b>'+esc(p.name)+'</b><span>'+esc(p.street+", "+p.zip+" "+p.city)+'</span><button class="btn link" data-xp="del" data-id="'+esc(p.id)+'">Ta bort</button></div>').join("")+'</div>':'')+'</div>'}
+document.addEventListener("click",async e=>{const t=e.target.closest("[data-xp]");if(!t||!S.bundle||S.bundle.role!=="admin")return;const g=id=>(document.getElementById(id)||{}).value||"";
+  if(t.dataset.xp==="add"){const F=S.xf={n:g("xpN").trim(),s:g("xpS").trim(),z:g("xpZ").trim(),c:g("xpC").trim(),k:g("xpK")||"station",err:""};
+    if(!F.n||!F.c){F.err="Skriv minst namn och ort.";render();return}if((S.bundle.places||[]).some(p=>p.name.toLowerCase()===F.n.toLowerCase())){F.err="Det finns redan en adress med det namnet.";render();return}
+    t.disabled=true;try{await xpSave(l=>l.push({id:"x"+Date.now().toString(36),name:F.n,street:F.s,zip:F.z,city:F.c,kind:F.k}));S.xf=null;S.geoTried=false;geoInit();toast("Adressen är tillagd.")}catch(err){F.err="Kunde inte spara: "+err.message}render();return}
+  if(t.dataset.xp==="del"){try{await xpSave(l=>{const i=l.findIndex(p=>p.id===t.dataset.id);if(i>=0)l.splice(i,1)})}catch(err){toast("Kunde inte ta bort.")}render()}});
 /* kontor: karta */
 async function loadPos(){if(!S.bundle||S.bundle.role!=="admin"||!S.bundle.planKey||!S.bundle.status)return;const st=S.bundle.status;
   for(const pc of (S.bundle.planCars||[])){if(!pc.dir)continue;
@@ -1496,7 +1519,7 @@ function renderMap(){
       '<div style="margin-top:14px"><b>Flakplatser</b>'+slotGrids()+'</div></div>';
     h+='<div class="card" style="margin-top:12px"><b>Alla adresser ('+(S.bundle.places||[]).length+')</b><div style="overflow:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr class="muted" style="text-align:left"><th>Namn</th><th>Adress</th><th>Typ</th><th>Flak</th><th></th></tr></thead><tbody>'+(S.bundle.places||[]).map(q=>{const g=S.geo[q.id],fl=flakAt(q.name);return '<tr style="border-top:1px solid var(--line)"><td><b>'+esc(q.name)+'</b></td><td>'+esc(q.street+", "+q.zip+" "+q.city)+'</td><td>'+(q.kind==="fyll"?'Påfyllning':'Station')+'</td><td>'+(fl.length?esc(fl.join(", ")):'<span class="muted">–</span>')+'</td><td>'+(g&&g.lat?'<button class="btn link" data-mp="goto" data-id="'+esc(q.id)+'">Visa på kartan</button>':'<span class="muted">ej hittad</span>')+'</td></tr>'}).join("")+'</tbody></table></div></div>';
     const nf=(S.bundle.places||[]).filter(q=>S.geo[q.id]&&S.geo[q.id].x),nn=(S.bundle.places||[]).filter(q=>!S.geo[q.id]);
-    if(nf.length||nn.length)h+='<div class="notice warn" style="margin-top:12px"><b>'+(nf.length?nf.length+' adresser hittades inte':nn.length+' adresser är inte hämtade än')+'</b> – '+esc((nf.length?nf:nn).map(q=>q.name).join(", "))+'. Tryck "Hämta adresser igen".</div>'}
+    h+=xpCard();if(nf.length||nn.length)h+='<div class="notice warn" style="margin-top:12px"><b>'+(nf.length?nf.length+' adresser hittades inte':nn.length+' adresser är inte hämtade än')+'</b> – '+esc((nf.length?nf:nn).map(q=>q.name).join(", "))+'. Tryck "Hämta adresser igen".</div>'}
   return h}
 const mwx=(lon,z)=>(lon+180)/360*256*2**z,mwy=(lat,z)=>{const r=lat*Math.PI/180;return (1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*256*2**z};
 const mlon=(x,z)=>x/(256*2**z)*360-180,mlat=(y,z)=>Math.atan(Math.sinh(Math.PI*(1-2*y/(256*2**z))))*180/Math.PI;
@@ -1527,7 +1550,7 @@ document.addEventListener("click",e=>{const t=e.target.closest("[data-mp]");if(!
   const end=e=>{if(!dr||e.pointerId!==dr.id)return;const d=dr;dr=null;if(Math.abs(d.dx)+Math.abs(d.dy)<3){drawMap();return}const z=S.mzc||S.mz||8;S.mc={lat:mlat(mwy(S.mc.lat,z)-d.dy,z),lon:mlon(mwx(S.mc.lon,z)-d.dx,z)};drawMap()};
   document.addEventListener("pointerup",end);document.addEventListener("pointercancel",end);
   document.addEventListener("wheel",e=>{const el=e.target.closest&&e.target.closest("#gmap");if(!el)return;e.preventDefault();const now=Date.now();if(now-(S.mwt||0)<180)return;S.mwt=now;S.mz=(S.mzc||8)+(e.deltaY<0?1:-1);drawMap()},{passive:false})}
-setInterval(async()=>{if(S.bundle&&S.bundle.role==="admin"&&S.view==="map"&&document.visibilityState==="visible"){await loadPos();render()}},20*1000);
+setInterval(async()=>{if(S.bundle&&S.bundle.role==="admin"&&S.view==="map"&&document.visibilityState==="visible"){await loadPos();if(!/INPUT|SELECT|TEXTAREA/.test((document.activeElement||{}).tagName||""))render()}},20*1000);
 /* ---------- Felanmälan / verkstad med bilder ---------- */
 const FT={station:"Fel på mack",fel:"Fel på bilen",slap:"Fel på släp / flak",skada:"Skada / olycka",verk:"Behöver verkstad",annat:"Annat"};
 const FA={snart:["Bör åtgärdas snart","p-warn"],kan:["Kan köra som vanligt","p-type"],ej:["Kan inte köra","p-warn"]};
@@ -1753,11 +1776,20 @@ document.addEventListener("click",async e=>{const t=e.target.closest("[data-ac]"
   if(a==="send"&&r){readAc();if(!S.acText.trim()){toast("Skriv varför du inte kan.");return}const tx=S.acText.trim();S.acNo=null;ackSet(d,r,{ok:false,text:tx});await recordFor(d,"andring",{upd:String(r.updated),ok:false,text:tx});toast("Ditt svar är skickat till kontoret.")}});
 function andringAll(dir,date){const out=[];(S.server[dir+"|"+date]||[]).forEach(n=>{const p=parseName(n);if(!p||p.type!=="andring")return;const d=S.nyData[n];if(d)out.push({ts:p.ts,d,date})});return out}
 function andringCard(){
-  const ds=[...new Set([today(),iso(new Date(Date.now()+864e5)),S.pl&&S.pl.date].filter(Boolean))],rows=[];
+  const ds=[...new Set([today(),iso(new Date(Date.now()+864e5)),S.pl&&S.pl.date].filter(Boolean))];let rows=[];
   (S.bundle.planCars||[]).forEach(c=>ds.forEach(d=>{const last=new Map();andringAll(c.dir,d).sort((a,b)=>a.ts-b.ts).forEach(x=>last.set(x.d.upd,x));last.forEach(x=>rows.push({c,x,d}))}));
-  if(!rows.length)return "";rows.sort((a,b)=>b.x.ts-a.x.ts);
-  return '<div class="card notis"><h3>Förarnas svar på ändrade rutter</h3>'+rows.slice(0,8).map(r=>'<div class="nrow"><span class="pill '+(r.x.d.ok?'p-full':'p-warn')+'">'+(r.x.d.ok?'Godkänt':'Nekat')+'</span><b>'+esc(r.c.name)+(r.c.driver?' · '+esc(r.c.driver.split(" ")[0]):'')+'</b><span>'+esc(dayLabel(r.d))+(r.x.d.text?' – '+esc(r.x.d.text):'')+'</span><span class="muted">'+esc(hhmm(new Date(r.x.ts).toISOString()))+'</span></div>').join("")+'</div>'}
-const andringNek=()=>{let n=0;(S.bundle.planCars||[]).forEach(c=>[today(),iso(new Date(Date.now()+864e5))].forEach(d=>{const last=new Map();andringAll(c.dir,d).sort((a,b)=>a.ts-b.ts).forEach(x=>last.set(x.d.upd,x));last.forEach(x=>{if(!x.d.ok)n++})}));return n};
+  rows.forEach(r=>r.k="an|"+r.c.dir+"|"+r.d+"|"+r.x.d.upd);const trash=rows.filter(r=>DL(r.k).st==="tr");rows=rows.filter(r=>DL(r.k).st!=="tr");
+  if(!rows.length&&!trash.length)return "";rows.sort((a,b)=>b.x.ts-a.x.ts);
+  return '<div class="card notis"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h3>Förarnas svar på ändrade rutter</h3>'+(rows.length?'<button class="btn small" data-atr="all">🗑 Rensa alla till papperskorgen</button>':'')+'</div>'+(rows.length?'':'<p class="muted" style="margin:4px 0">Inga svar.</p>')+rows.slice(0,8).map(r=>'<div class="nrow"><span class="pill '+(r.x.d.ok?'p-full':'p-warn')+'">'+(r.x.d.ok?'Godkänt':'Nekat')+'</span><b>'+esc(r.c.name)+(r.c.driver?' · '+esc(r.c.driver.split(" ")[0]):'')+'</b><span>'+esc(dayLabel(r.d))+(r.x.d.text?' – '+esc(r.x.d.text):'')+'</span><span class="muted">'+esc(hhmm(new Date(r.x.ts).toISOString()))+'</span><button class="btn link" data-atr="one" data-k="'+esc(r.k)+'">Ta bort</button></div>').join("")+(trash.length?'<details id="atr" style="margin-top:8px"'+(S.aTrOpen?' open':'')+'><summary class="muted" style="cursor:pointer">🗑 Papperskorg ('+trash.length+')</summary>'+trash.map(r=>'<div class="nrow"><span class="pill '+(r.x.d.ok?'p-full':'p-warn')+'">'+(r.x.d.ok?'Godkänt':'Nekat')+'</span><b>'+esc(r.c.name)+'</b><span>'+esc(dayLabel(r.d))+(r.x.d.text?' – '+esc(r.x.d.text):'')+'</span><button class="btn link" data-atr="back" data-k="'+esc(r.k)+'">Återställ</button></div>').join("")+'<button class="btn small" style="color:#d03a3a;margin-top:6px" data-atr="empty">'+(S.aEmptyArm?'Tryck igen för att TÖMMA permanent':'Töm papperskorgen')+'</button></details>':'')+'</div>'}
+document.addEventListener("toggle",e=>{if(e.target&&e.target.id==="atr")S.aTrOpen=e.target.open},true);
+document.addEventListener("click",async e=>{const t=e.target.closest("[data-atr]");if(!t||!S.bundle||S.bundle.role!=="admin")return;const a=t.dataset.atr;t.disabled=true;
+  try{
+    if(a==="empty"&&!S.aEmptyArm){S.aEmptyArm=true;t.disabled=false;render();return}S.aEmptyArm=false;
+    const ds=[...new Set([today(),iso(new Date(Date.now()+864e5)),S.pl&&S.pl.date].filter(Boolean))],ks=[];
+    (S.bundle.planCars||[]).forEach(c=>ds.forEach(d=>{new Set(andringAll(c.dir,d).map(x=>x.d.upd)).forEach(u=>ks.push("an|"+c.dir+"|"+d+"|"+u))}));
+    await delSave(d=>{if(a==="all")ks.forEach(k=>{if(!d[k]||d[k].st!=="tr")d[k]={st:"tr",ts:Date.now()}});else if(a==="one")d[t.dataset.k]={st:"tr",ts:Date.now()};else if(a==="back")delete d[t.dataset.k];else if(a==="empty")Object.keys(d).forEach(k=>{if(k.indexOf("an|")===0&&d[k].st==="tr")d[k]={st:"gone",ts:Date.now()}})})}
+  catch(err){toast("Kunde inte spara: "+err.message)}render()});
+const andringNek=()=>{let n=0;(S.bundle.planCars||[]).forEach(c=>[today(),iso(new Date(Date.now()+864e5))].forEach(d=>{const last=new Map();andringAll(c.dir,d).sort((a,b)=>a.ts-b.ts).forEach(x=>last.set(x.d.upd,x));last.forEach(x=>{if(!x.d.ok&&!DL("an|"+c.dir+"|"+d+"|"+x.d.upd).st)n++})}));return n};
 
 /* ---------- Ledighetsansökan ---------- */
 const LT={semester:"Semester",ledig:"Ledig dag",foraldra:"Föräldraledighet",vab:"VAB",annat:"Annat"};
@@ -2148,7 +2180,7 @@ function renderSum(){
    sec("Körningar med släp (appen)",O.trl.length?tbl(["Dag","Bil","Släp","Körn."],O.trl):'<p class="muted" style="margin:0">Inga.</p>')+
    sec("Rapporterat i appen per dag",tbl(["Datum","Bil","Förare","Släp","Körn.","Lossade","kg"],O.perDag.sort((a,b)=>a[0]<b[0]?1:-1))):"");
 }
-function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v86</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v86 – skicka den här texten till mig.</div>'}}
+function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v87</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v87 – skicka den här texten till mig.</div>'}}
 function renderAdmin(){
   const ds=days(),B=S.bundle;let h='<div class="pagehead"><h2>Översikt</h2><p class="muted">Dagens körningar, status från förarna och aviseringar.</p></div>';
   {const D=S.date||today(),cs=B.cars.filter(c=>c.days[D]);let nL=0,nU=0,nG=0;cs.forEach(c=>{const st=statesFor(c.dir,D);if(st.get("dag|godkand"))nG++;allLegs(c.dir,D,c.days[D].legs.map(l=>Object.assign({},l,{from:{name:l.from},to:{name:l.to}}))).filter(l=>!l.deleted).forEach(l=>{nL++;if(st.get(l.order+"|lossad"))nU++})});
