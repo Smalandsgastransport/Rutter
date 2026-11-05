@@ -849,12 +849,15 @@ async function admDelLeg(dir,date,order){const st=S.bundle.status,name=Date.now(
 function notisCard(date){
   const rows=[];(S.bundle.planCars||[]).forEach(c=>notisAll(c.dir,date).forEach(n=>rows.push({c,n})));rows.sort((a,b)=>a.n.ts-b.n.ts);
   if(!rows.length)return "";
-  return '<div class="card notis"><h3>Aviseringar från förarna · '+esc(dayLabel(date))+'</h3>'+rows.map(r=>{const rd=notisReads(r.c.dir,date).get(r.n.name);
+  const vis=[],old={};rows.slice().reverse().forEach(r=>{const rd=notisReads(r.c.dir,date).get(r.n.name),k=r.c.dir;if(!old[k]){old[k]=1;vis.push(r)}else if(!rd)vis.push(r);else (old[k+"_h"]=old[k+"_h"]||[]).push(r)});
+  const hidden=rows.filter(r=>vis.indexOf(r)<0),openAll=S.fold["notis"+date];
+  const show=(openAll?rows:vis.slice().sort((a,b)=>a.n.ts-b.n.ts));
+  return '<div class="card notis"><h3>Aviseringar från förarna · '+esc(dayLabel(date))+'</h3>'+(hidden.length?'<div style="margin-bottom:6px"><button class="btn link" data-fold="notis'+esc(date)+'">'+(openAll?"Dölj tidigare (lästa)":"Visa tidigare ("+hidden.length+")")+'</button></div>':'')+show.map(r=>{const rd=notisReads(r.c.dir,date).get(r.n.name);
     return '<div class="nrow" style="align-items:center"><span class="pill p-warn">'+esc(KIND[r.n.d.kind]||"Meddelande")+'</span><b>'+esc(r.c.name)+(r.c.driver?' · '+esc(r.c.driver.split(" ")[0]):'')+'</b><span>'+esc(r.n.d.text||"")+(r.n.d.tid?' (kl '+esc(r.n.d.tid)+')':'')+'</span><span class="muted">'+esc(hhmm(new Date(r.n.ts).toISOString()))+'</span>'+
     (rd?'<span class="pill p-full">✓ Läst '+esc(hhmm(new Date(rd.ts).toISOString()))+'</span>'+(rd.svar?'<span class="muted">Svar: '+esc(rd.svar)+'</span>':''):'<span class="acts"><button class="btn go small" data-nl="ok" data-dir="'+esc(r.c.dir)+'" data-date="'+esc(date)+'" data-ref="'+esc(r.n.name)+'">Läst</button><button class="btn small" data-nl="svar" data-dir="'+esc(r.c.dir)+'" data-date="'+esc(date)+'" data-ref="'+esc(r.n.name)+'">Läst + svara</button></span>')+'</div>'}).join("")+'</div>'}
 function myNotis(){
   if(!(S.bundle&&S.bundle.role==="driver"))return "";const ds=[...new Set([today(),S.date].filter(Boolean))],rd=new Map(),ns=[];ds.forEach(d=>{notisReads(S.bundle.dir,d).forEach((v,k)=>rd.set(k,v));ns.push(...notisAll(S.bundle.dir,d))});if(!ns.length)return "";
-  return '<div class="card" style="margin-top:12px"><b>Dina meddelanden till kontoret</b>'+ns.map(n=>{const r=rd.get(n.name);return '<div class="nrow"><span>'+esc((KIND[n.d.kind]||"Meddelande")+(n.d.text?': '+n.d.text:'')+(n.d.tid?' (kl '+n.d.tid+')':''))+'</span>'+(r?'<span class="pill p-full">✓ Kontoret har läst '+esc(hhmm(new Date(r.ts).toISOString()))+'</span>'+(r.svar?'<div class="notice msg" style="margin-top:6px"><b>Svar från kontoret</b><br>'+esc(r.svar)+'</div>':''):'<span class="muted">'+(n.pending?'Väntar på att skickas':'Skickat – ej läst än')+'</span>')+'</div>'}).join("")+'</div>'}
+  return '<div class="card" style="margin-top:12px"><b>Dina meddelanden till kontoret</b>'+foldList("mynotis",ns.slice().sort((a,b)=>b.ts-a.ts).map(n=>{const r=rd.get(n.name);return '<div class="nrow"><span>'+esc((KIND[n.d.kind]||"Meddelande")+(n.d.text?': '+n.d.text:'')+(n.d.tid?' (kl '+n.d.tid+')':''))+'</span>'+(r?'<span class="pill p-full">✓ Kontoret har läst '+esc(hhmm(new Date(r.ts).toISOString()))+'</span>'+(r.svar?'<div class="notice msg" style="margin-top:6px"><b>Svar från kontoret</b><br>'+esc(r.svar)+'</div>':''):'<span class="muted">'+(n.pending?'Väntar på att skickas':'Skickat – ej läst än')+'</span>')+'</div>'}))+'</div>'}
 document.addEventListener("click",async e=>{const t=e.target.closest("[data-nl]");if(!t||!S.bundle)return;
   let svar="";if(t.dataset.nl==="svar"){svar=(window.prompt("Svar till föraren:","")||"").trim();if(!svar)return}
   t.disabled=true;try{await notisMark(t.dataset.dir,t.dataset.date,t.dataset.ref,svar);toast("Markerad som läst.")}catch(err){toast("Kunde inte spara. Försök igen.");t.disabled=false}render()});
@@ -872,7 +875,7 @@ function renderMsg(){
   return h}
 function readMsg(){const g=id=>document.getElementById(id);const F=S.nf;if(g("mText"))F.text=g("mText").value;if(g("mFrom"))F.from=g("mFrom").value;if(g("mTo"))F.to=g("mTo").value}
 function driverNotesHtml(r){const cid=(S.bundle.car||{}).id,ns=notesFor(cid,r.date);
-  return ns.map(n=>'<div class="notice msg"><b>Meddelande från kontoret</b><br>'+esc(n.text)+'</div>').join("")}
+  return foldList("notes",ns.slice().sort((a,b)=>String(b.created||"").localeCompare(String(a.created||""))).map(n=>'<div class="notice msg"><b>Meddelande från kontoret</b><br>'+esc(n.text)+'</div>'))}
 function notisForm(){
   const T=S.nt;if(!T)return '<button class="btn" data-ntopen="1">Meddela kontoret</button>';
   const inp='style="font:inherit;font-size:17px;padding:10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg);width:100%"';
@@ -947,7 +950,8 @@ async function dkHist(){
   finally{S.dk.hbusy=false}}
 function dagslutE(dir,date){return statesFor(dir,date).get('dag|dagslut')||null}
 function dagslutBtn(){const e=dagslutE(S.bundle.dir,today());return e?'<span class="pill p-full">Dagen avslutad '+esc(hhmm(e.ts))+'</span>':'<button class="btn go" data-dk="dagslut">Avsluta dagen och skicka in godsdeklarationer</button>'}
-function arkCard(){
+function arkCard(){return arkCard0()+flakCard()}
+function arkCard0(){
   if(!(S.bundle&&S.bundle.role==="driver"))return "";const n=Object.keys(dkIdx()).length;
   return '<div class="card" style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div><b>Mina körda deklarationer</b><div class="muted" style="font-size:14px">'+n+' sparade på den här enheten</div></div><span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-dk="arch">Öppna arkivet</button>'+dagslutBtn()+'</span></div>'}
 /* körd / ej körd (grön bock / rött kryss) – sparas som händelse, raderas aldrig */
@@ -985,7 +989,8 @@ async function arLoad(){
   try{for(const pc of (S.bundle.planCars||[])){if(!pc.dir)continue;
       const ds=Object.keys(S.plans).filter(k=>k.indexOf(pc.dir+"|")===0).map(k=>k.slice(pc.dir.length+1)).filter(d=>d<=today());await histFetch(pc.dir,ds)}}catch(e){}
   S.ar.busy=false;S.ar.rows=akItems();
-  try{await ejLoad();const reds=S.ar.rows.filter(x=>x.ok===false&&!(S.ej.d[x.dir+"|"+x.date+"|"+x.leg.order]));
+  try{await ejLoad();for(const k of Object.keys(S.ej.d||{})){const e=S.ej.d[k];if(!S.server[e.dir+"|"+e.date]){await ghList(e.dir,e.date);await fetchNy(e.dir,e.date)}}}catch(e){}
+  try{const reds=S.ar.rows.filter(x=>x.ok===false&&!(S.ej.d[x.dir+"|"+x.date+"|"+x.leg.order]));
     if(reds.length)await ejKordAdd(reds.map(x=>({key:x.dir+"|"+x.date+"|"+x.leg.order,dir:x.dir,date:x.date,order:x.leg.order,ok:false,car:x.car,from:x.leg.from.name,to:x.leg.to.name,load:x.leg.load,mangd:x.leg.mangd})))}catch(e){}}
 function renderArk(){
   const A=S.ar,cars=S.bundle.planCars||[],rows=(A.rows||[]).slice().reverse(),vis0=A.car==="all"?rows:rows.filter(x=>x.dir===(cars.find(c=>c.id===A.car)||{}).dir),vis=vis0.filter(x=>x.ok!==false),notRun=vis0.filter(x=>x.ok===false);
@@ -1000,14 +1005,18 @@ function renderArk(){
   if(notRun.length)h+='<div class="card" style="margin-top:14px;border-left:4px solid #d03a3a"><b>Ej körda – förarna har markerat med ✗ (sparas separat, räknas inte i summorna)</b><div style="overflow:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse;font-size:14px"><tbody>'+notRun.map(x=>'<tr style="border-top:1px solid var(--line)"><td>'+esc(x.date)+'</td><td>'+esc(x.car)+'</td><td>'+esc(x.leg.order)+'</td><td>'+esc(x.leg.from.name)+' → '+esc(x.leg.to.name)+'</td><td>'+(lockGet(x.dir,x.date,x.leg.order)?'<button class="btn link" data-ar="unlock" data-i="'+rows.indexOf(x)+'">🔒 Låst</button>':'<button class="btn link" data-ar="lock" data-i="'+rows.indexOf(x)+'">Lås</button>')+'</td><td><button class="btn link" data-ar="open" data-i="'+rows.indexOf(x)+'">Öppna</button></td></tr>').join("")+'</tbody></table></div></div>';
   {const ej=Object.keys(S.ej.d||{}).map(k=>S.ej.d[k]).sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:0);
     h+='<div class="card" style="margin-top:14px;border-left:4px solid #d03a3a"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center"><b>Ej körda – egen fil (sparas alltid, raderas aldrig)</b><button class="btn small" data-ar="ejcsv">Ladda ner filen (CSV)</button></div><p class="muted" style="font-size:14px;margin:6px 0">Allt som någon gång markerats ✗ ligger här med historik, även om det senare ändrats. "Ändrad till ✓" betyder att någon trycket grönt efteråt – kontrollera.</p>'+
-      (ej.length?'<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr class="muted" style="text-align:left"><th>Datum</th><th>Bil</th><th>Order</th><th>Från → Till</th><th>Nu</th><th>Historik</th></tr></thead><tbody>'+ej.map(e=>{const cur=e.log.length?e.log[e.log.length-1].ok:false;const row=rows.find(x=>x.dir===e.dir&&x.date===e.date&&x.leg.order===e.order),nu=row?row.ok:cur;
-        return '<tr style="border-top:1px solid var(--line)"><td>'+esc(e.date)+'</td><td>'+esc(e.car)+'</td><td>'+esc(e.order)+'</td><td>'+esc(e.from)+' → '+esc(e.to)+'</td><td>'+(nu===false?'<b style="color:#d03a3a">✗ Ej körd</b>':'<b style="color:#b26b00">⚠ Ändrad till '+(nu===true?'✓':'–')+'</b>')+'</td><td class="muted">'+e.log.map(l=>(l.ok?'✓':'✗')+' '+new Date(l.ts).toLocaleString("sv-SE",{dateStyle:"short",timeStyle:"short"})+' ('+esc(l.by)+')').join(' → ')+'</td></tr>'}).join("")+'</tbody></table></div>':'<p class="muted" style="margin:0">Inga ✗-markeringar än.</p>')+'</div>'}
+      (ej.length?'<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr class="muted" style="text-align:left"><th>Datum</th><th>Bil</th><th>Order</th><th>Från → Till</th><th>Nu</th><th>Låst</th><th>Historik</th></tr></thead><tbody>'+ej.map(e=>{const cur=e.log.length?e.log[e.log.length-1].ok:false;const row=rows.find(x=>x.dir===e.dir&&x.date===e.date&&x.leg.order===e.order),nu=row?row.ok:cur;
+        return '<tr style="border-top:1px solid var(--line)"><td>'+esc(e.date)+'</td><td>'+esc(e.car)+'</td><td>'+esc(e.order)+'</td><td>'+esc(e.from)+' → '+esc(e.to)+'</td><td>'+(nu===false?'<b style="color:#d03a3a">✗ Ej körd</b>':'<b style="color:#b26b00">⚠ Ändrad till '+(nu===true?'✓':'–')+'</b>')+'</td><td>'+(lockGet(e.dir,e.date,e.order)?'<button class="btn link" data-ar="ecunlock" data-k="'+esc(e.dir+"|"+e.date+"|"+e.order)+'">🔒 Låst</button>':'<button class="btn link" data-ar="eclock" data-k="'+esc(e.dir+"|"+e.date+"|"+e.order)+'">Lås</button>')+'</td><td class="muted">'+e.log.map(l=>(l.ok?'✓':'✗')+' '+new Date(l.ts).toLocaleString("sv-SE",{dateStyle:"short",timeStyle:"short"})+' ('+esc(l.by)+')').join(' → ')+'</td></tr>'}).join("")+'</tbody></table></div>':'<p class="muted" style="margin:0">Inga ✗-markeringar än.</p>')+'</div>'}
   return h}
 document.addEventListener("click",async e=>{const t=e.target.closest("[data-ar]");if(!t||!S.bundle)return;const a=t.dataset.ar;
   if(a==="car"){S.ar.car=t.dataset.c;render();return}
   if(a==="open"){const x=(S.ar.rows||[]).slice().reverse()[+t.dataset.i];if(x)try{pdfOverlay(await makePdf([x.leg],x.r),x.leg.order+".pdf")}catch(err){toast("Kunde inte skapa PDF:en.")}return}
   if(a==="lock"||a==="unlock"){const x=(S.ar.rows||[]).slice().reverse()[+t.dataset.i];if(!x)return;t.disabled=true;
     try{await admEvent(x.dir,x.date,x.leg.order,"las",{on:a==="lock",ok:a==="lock"?(x.ok===undefined?null:x.ok):null});if(a==="lock"){const o=x;}}catch(err){toast("Kunde inte spara låsningen.")}
+    S.ar.rows=akItems();render();return}
+  if(a==="eclock"||a==="ecunlock"){const e2=(S.ej.d||{})[t.dataset.k];if(!e2)return;t.disabled=true;
+    try{const row=(S.ar.rows||[]).find(x=>x.dir===e2.dir&&x.date===e2.date&&x.leg.order===e2.order),cur=row?row.ok:(e2.log.length?e2.log[e2.log.length-1].ok:false);
+      await admEvent(e2.dir,e2.date,e2.order,"las",{on:a==="eclock",ok:a==="eclock"?cur:null})}catch(err){toast("Kunde inte spara låsningen.")}
     S.ar.rows=akItems();render();return}
   if(a==="lockall"){const xs=(S.ar.rows||[]).filter(x=>(S.ar.car==="all"||x.dir===(((S.bundle.planCars||[]).find(c=>c.id===S.ar.car))||{}).dir)&&!lockGet(x.dir,x.date,x.leg.order));
     if(!xs.length){toast("Allt är redan låst.");return}if(S.arLockArm!==xs.length){S.arLockArm=xs.length;toast("Tryck igen för att låsa "+xs.length+" transporter. Förarna kan då inte ändra ✓/✗.");return}S.arLockArm=null;t.disabled=true;
@@ -1165,6 +1174,22 @@ async function admEvent(dir,date,order,type,data){const st=S.bundle.status,name=
   const d=Object.assign({typ:type,order,datum:date,tid:new Date().toISOString(),bil:c.name||"",forare:"",av:"kontoret"},data);
   const r=await fetch(GH+st.repo+"/contents/status/"+date+"/"+dir+"/"+name,{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify({message:pm(dir),content:btoa(unescape(encodeURIComponent(JSON.stringify(d))))})});
   if(!r.ok)throw new Error("put");(S.server[dir+"|"+date]=S.server[dir+"|"+date]||[]).push(name);S.nyData[name]=d}
+function flakCard(){if(!(S.bundle&&S.bundle.role==="driver"&&S.bundle.planKey))return "";
+  return '<div class="card" style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div><b>Var står flaken?</b><div class="muted" style="font-size:14px">'+Object.keys(S.fk.loc||{}).length+' flak registrerade</div></div><button class="btn" data-fv="open">Öppna flaklistan</button></div>'}
+function flakView(){
+  const old=document.getElementById("fkview");if(old)old.remove();const loc=S.fk.loc||{},q=(S.fkq||"").trim().toLowerCase(),all=Object.keys(loc);
+  const where=n=>{const v=loc[n]||{};return v.p||(v.car?"På bil: "+v.car:"Okänd")};
+  const groups={};all.filter(n=>!q||(n+" "+where(n)).toLowerCase().indexOf(q)>=0).forEach(n=>{(groups[where(n)]=groups[where(n)]||[]).push(n)});
+  const keys=Object.keys(groups).sort();
+  const o=document.createElement("div");o.id="fkview";o.style.cssText="position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column;padding:12px;gap:10px;overflow:auto";
+  o.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:19px">Var står flaken?</b><button class="btn" data-fv="close">Stäng</button></div><div class="muted" style="font-size:14px">Uppdateras när chaufförerna lastar och lossar. Gehab-flak ('+GEHAB.join(", ")+') får bara åka på bilen, inte på släpet.</div><input id="fkq" value="'+esc(S.fkq||"")+'" placeholder="Sök flaknummer eller plats…" style="font:inherit;font-size:17px;padding:10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg)">'+
+    '<div class="card"><b>Gehab-flak</b><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">'+GEHAB.map(n=>'<span class="pill p-antal">'+n+': '+esc(loc[n]?where(n):"okänd plats")+'</span>').join("")+'</div></div>'+
+    (keys.length?keys.map(k=>'<div class="card"><b>'+esc(k)+' <span class="muted">('+groups[k].length+')</span></b><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">'+groups[k].sort((a,b)=>(+a||0)-(+b||0)).map(n=>'<span class="pill '+(isGehab(n)?'p-antal':'p-type')+'" style="font-size:17px;padding:8px 12px">'+esc(n)+(isGehab(n)?' G':'')+'</span>').join("")+'</div></div>').join(""):'<div class="card muted">Inga flak hittades.</div>');
+  document.body.appendChild(o);const i=document.getElementById("fkq");if(q&&i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}}
+document.addEventListener("click",async e=>{const t=e.target.closest("[data-fv]");if(!t)return;
+  if(t.dataset.fv==="close"){const o=document.getElementById("fkview");if(o)o.remove();return}
+  if(t.dataset.fv==="open"){S.fkq="";flakView();await loadFlak();flakView()}});
+document.addEventListener("input",e=>{if(e.target.id==="fkq"){S.fkq=e.target.value;flakView()}});
 /* ---------- Felanmälan / verkstad med bilder ---------- */
 const FT={fel:"Fel på bilen",slap:"Fel på släp / flak",skada:"Skada / olycka",verk:"Behöver verkstad",annat:"Annat"};
 const FA={snart:["Bör åtgärdas snart","p-warn"],kan:["Kan köra som vanligt","p-type"],ej:["Kan inte köra","p-warn"]};
@@ -1338,15 +1363,15 @@ function legDiff(a,b){const out=[],A=new Map(a.map(x=>[x.o,x])),B=new Map(b.map(
 S.acNo=null;S.acText="";
 function readAc(){const g=document.getElementById("acText");if(g)S.acText=g.value}
 function changeCards(){
-  if(!(S.bundle&&S.bundle.role==="driver"&&S.pl0))return "";let h="";
+  if(!(S.bundle&&S.bundle.role==="driver"&&S.pl0))return "";const cs=[];
   Object.keys(S.bundle.days).sort().forEach(d=>{const r=S.bundle.days[d];if(!r||!r.legs||d<iso(new Date(Date.now()-864e5)))return;const a=ackGet(d);
     if(!a){ackSet(d,r);return}
-    if(a.upd===String(r.updated)){if(a.res&&a.res.ok===false)h+='<div class="notice warn" style="margin-bottom:10px"><b>Du har nekat ändringen för '+esc(dayLabel(d))+'</b><br>'+esc(a.res.text||"")+'<br><span class="muted">Väntar på svar från kontoret.</span></div>';return}
+    if(a.upd===String(r.updated)){if(a.res&&a.res.ok===false)cs.push({u:String(r.updated),h:'<div class="notice warn" style="margin-bottom:10px"><b>Du har nekat ändringen för '+esc(dayLabel(d))+'</b><br>'+esc(a.res.text||"")+'<br><span class="muted">Väntar på svar från kontoret.</span></div>'});return}
     const diff=legDiff(a.snap,legSnap(r));if(!diff.length){ackSet(d,r,a.res);return}
-    h+='<div class="notice warn" style="border-left:5px solid #c0392b;margin-bottom:10px"><b style="font-size:17px">Kontoret har ändrat rutten – '+esc(dayLabel(d))+'</b><ul style="margin:8px 0 8px 18px;padding:0">'+diff.map(x=>'<li>'+esc(x)+'</li>').join("")+'</ul>'+
+    cs.push({u:String(r.updated),h:'<div class="notice warn" style="border-left:5px solid #c0392b;margin-bottom:10px"><b style="font-size:17px">Kontoret har ändrat rutten – '+esc(dayLabel(d))+'</b><ul style="margin:8px 0 8px 18px;padding:0">'+diff.map(x=>'<li>'+esc(x)+'</li>').join("")+'</ul>'+
       (S.acNo===d?'<label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Varför kan du inte? (obligatoriskt)<textarea id="acText" rows="3" style="font:inherit;font-size:16px;padding:9px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg)">'+esc(S.acText)+'</textarea></label><div class="acts" style="margin-top:8px"><button class="btn go" data-ac="send" data-d="'+d+'">Skicka nej</button><button class="btn" data-ac="cancel">Avbryt</button></div>':
-      '<div class="acts"><button class="btn go" data-ac="ok" data-d="'+d+'">Godkänn ändringen</button><button class="btn" data-ac="no" data-d="'+d+'">Neka</button></div>')+'</div>'});
-  return h}
+      '<div class="acts"><button class="btn go" data-ac="ok" data-d="'+d+'">Godkänn ändringen</button><button class="btn" data-ac="no" data-d="'+d+'">Neka</button></div>')+'</div>'})});
+  cs.sort((a,b)=>b.u.localeCompare(a.u));return foldList("chg",cs.map(x=>x.h))}
 async function recordFor(date,type,extra){const now=new Date(),name=now.getTime()+"_dag_"+type+".json",r=S.bundle.days[date]||{};
   const q=queue();q.push({name,date,sent:false,data:Object.assign({typ:type,order:null,datum:date,tid:now.toISOString(),bil:S.bundle.car.name,forare:r.driver||""},extra||{})});saveQueue(q);render();await sync();render()}
 document.addEventListener("click",async e=>{const t=e.target.closest("[data-ac]");if(!t||!S.bundle)return;const a=t.dataset.ac,d=t.dataset.d,r=S.bundle.days[d];
@@ -1949,17 +1974,21 @@ document.addEventListener("visibilitychange",()=>{if(document.visibilityState===
 /* ---------- Nytt från kontoret: banner överst + automatisk uppdatering + aviseringar ---------- */
 const seenKey=()=>"alseen:"+(S.bundle&&S.bundle.dir);
 const alSeen=()=>{try{return new Set(JSON.parse(store.get(seenKey())||"[]"))}catch(e){return new Set()}};
+S.fold={};
+function foldList(key,items,sep){if(items.length<=1)return items.join("");const open=S.fold[key];
+  return items[0]+(open?items.slice(1).join(""):"")+'<div style="margin-top:6px"><button class="btn link" data-fold="'+esc(key)+'">'+(open?"Dölj tidigare":"Visa tidigare ("+(items.length-1)+")")+'</button></div>'}
+document.addEventListener("click",e=>{const t=e.target.closest("[data-fold]");if(!t)return;S.fold[t.dataset.fold]=!S.fold[t.dataset.fold];render()});
 function topAlerts(){
   if(!(S.bundle&&S.bundle.role==="driver"))return [];const dir=S.bundle.dir,out=[],seen=alSeen();
   const ds=[...new Set([today(),iso(new Date(Date.now()-864e5)),iso(new Date(Date.now()+864e5)),S.date].filter(Boolean))];
-  ds.forEach(d=>{const rd=notisReads(dir,d);notisAll(dir,d).forEach(n=>{const r=rd.get(n.name);if(!r)return;out.push({key:"n:"+n.name+":"+(r.svar?"s":"r"),t:"Kontoret har läst ditt meddelande"+(n.d.text?' "'+n.d.text+'"':"")+" ("+hhmm(new Date(r.ts).toISOString())+")"+(r.svar?". Svar: "+r.svar:"")})})});
-  S.hm.filter(x=>x.dir===dir&&x.status!=="ny").forEach(x=>{out.push({key:"h:"+x.id+":"+x.status+":"+(x.mf?x.mf.date+x.mf.tid:"")+x.date+x.tid,t:"Hämtning "+x.plats+" "+hmWhen(x)+": "+(x.status==="godkand"?"godkänd":x.status==="nekad"?"nekad"+(x.svar?" ("+x.svar+")":""):"kontoret föreslår "+hmWhen(x.mf)+(x.mf.text?" – "+x.mf.text:""))})});
-  S.fel.filter(x=>x.dir===dir&&(x.logg||[]).length).forEach(x=>{const l=x.logg[x.logg.length-1];out.push({key:"f:"+x.id+":"+x.logg.length,t:'Felanmälan "'+(x.rub||"")+'": '+(FS[l.status]?FS[l.status][0]:"")+(l.text?" – "+l.text:"")})});
-  S.led.filter(x=>x.dir===dir&&(x.status==="godkand"||x.status==="avslagen")).forEach(x=>{out.push({key:"l:"+x.id+":"+x.status,t:"Ledighet "+ledSpan(x)+": "+(x.status==="godkand"?"godkänd":"avslagen"+(x.svar?" ("+x.svar+")":""))})});
+  ds.forEach(d=>{const rd=notisReads(dir,d);notisAll(dir,d).forEach(n=>{const r=rd.get(n.name);if(!r)return;out.push({ts:r.ts,key:"n:"+n.name+":"+(r.svar?"s":"r"),t:"Kontoret har läst ditt meddelande"+(n.d.text?' "'+n.d.text+'"':"")+" ("+hhmm(new Date(r.ts).toISOString())+")"+(r.svar?". Svar: "+r.svar:"")})})});
+  S.hm.filter(x=>x.dir===dir&&x.status!=="ny").forEach(x=>{out.push({ts:+x.id||+new Date(x.upd||x.updated||0)||0,key:"h:"+x.id+":"+x.status+":"+(x.mf?x.mf.date+x.mf.tid:"")+x.date+x.tid,t:"Hämtning "+x.plats+" "+hmWhen(x)+": "+(x.status==="godkand"?"godkänd":x.status==="nekad"?"nekad"+(x.svar?" ("+x.svar+")":""):"kontoret föreslår "+hmWhen(x.mf)+(x.mf.text?" – "+x.mf.text:""))})});
+  S.fel.filter(x=>x.dir===dir&&(x.logg||[]).length).forEach(x=>{const l=x.logg[x.logg.length-1];out.push({ts:+new Date(l.ts||l.tid||0)||+x.id||0,key:"f:"+x.id+":"+x.logg.length,t:'Felanmälan "'+(x.rub||"")+'": '+(FS[l.status]?FS[l.status][0]:"")+(l.text?" – "+l.text:"")})});
+  S.led.filter(x=>x.dir===dir&&(x.status==="godkand"||x.status==="avslagen")).forEach(x=>{out.push({ts:+x.id||+new Date(x.upd||x.updated||0)||0,key:"l:"+x.id+":"+x.status,t:"Ledighet "+ledSpan(x)+": "+(x.status==="godkand"?"godkänd":"avslagen"+(x.svar?" ("+x.svar+")":""))})});
   return out.map(a=>Object.assign(a,{seen:seen.has(a.key)}))}
 function alertsHtml(){
   if(!(S.bundle&&S.bundle.role==="driver"))return "";const al=topAlerts().filter(a=>!a.seen);let h=changeCards();
-  if(al.length)h+='<div class="notice msg" style="border-left:5px solid var(--accent);margin-bottom:10px"><b>Nytt från kontoret</b>'+al.map(a=>'<div style="margin-top:6px;font-size:16px">'+esc(a.t)+'</div>').join("")+'<div style="margin-top:10px"><button class="btn go" data-al="ok">Okej, jag har läst</button></div></div>';
+  if(al.length)h+='<div class="notice msg" style="border-left:5px solid var(--accent);margin-bottom:10px"><b>Nytt från kontoret</b>'+foldList("al",al.slice().sort((a,b)=>(b.ts||0)-(a.ts||0)).map(a=>'<div style="margin-top:6px;font-size:16px">'+esc(a.t)+'</div>'))+'<div style="margin-top:10px"><button class="btn go" data-al="ok">Okej, jag har läst</button></div></div>';
   if("Notification" in window&&Notification.permission==="default")h+='<div class="notice" style="margin-bottom:10px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>Få en avisering när rutten ändras eller kontoret svarar.</span><button class="btn small" data-al="perm">Slå på aviseringar</button></div>';
   return h}
 document.addEventListener("click",async e=>{const t=e.target.closest("[data-al]");if(!t)return;
@@ -1988,6 +2017,7 @@ async function driverPoll(){
   catch(e){}
   finally{S.pollBusy=false}}
 setInterval(driverPoll,60*1000);
+S.shownDay=today();setInterval(()=>{const t=today();if(S.shownDay!==t){S.shownDay=t;if(S.bundle){try{pickDate()}catch(e){}render();if(S.sess)refresh(true)}}},15*1000);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")setTimeout(driverPoll,300)});
 
 setInterval(()=>{if(document.visibilityState==="visible"&&S.sess)refresh()},5*60*1000);
