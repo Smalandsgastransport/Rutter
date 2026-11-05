@@ -1307,6 +1307,29 @@ function gpsCard(){if(!(S.bundle&&S.bundle.role==="driver"&&S.bundle.planKey)||!
   return '<div class="card" style="margin:0 0 10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span>📍 Dela bilens position med kontoret</span><button class="btn go" data-gp="on">Slå på plats</button></div>'}
 document.addEventListener("click",e=>{const t=e.target.closest("[data-gp]");if(!t)return;if(t.dataset.gp==="on"){gpsStart();setTimeout(render,1500)}});
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&S.bundle&&S.bundle.role==="driver"){if(S.gp.wid==null)gpsInit();else gpsSend()}});
+/* adresser (påfyllning + stationer) på kartan: koordinater hämtas en gång via OpenStreetMap och sparas */
+S.geo={};S.geoSt={busy:false,msg:""};S.mapPl=true;
+const GEOP="plan/_geo/all.json";
+async function loadGeo(){if(!S.bundle||!S.bundle.planKey||!S.bundle.status)return;const st=S.bundle.status;
+  try{const r=await fetch(GH+st.repo+"/contents/"+GEOP+"?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});if(r.status===404)return;if(!r.ok)return;const j=await r.json();S.geoSha=j.sha;
+    const d=await openPlan(unb64(j.content.replace(/\n/g,"")));if(d&&typeof d==="object")Object.assign(S.geo,d)}catch(e){}}
+async function geoSave(){const st=S.bundle.status;
+  for(let i=0;i<3;i++){const body={message:pm("all"),content:b64(await sealPlan(S.geo))};if(S.geoSha)body.sha=S.geoSha;
+    const r=await fetch(GH+st.repo+"/contents/"+GEOP,{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify(body)});
+    if(r.ok){S.geoSha=(await r.json()).content.sha;return true}
+    if(r.status===409||r.status===422){const g=await fetch(GH+st.repo+"/contents/"+GEOP+"?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});S.geoSha=g.ok?(await g.json()).sha:null;continue}
+    return false}return false}
+async function geoFill(){if(S.geoSt.busy||!S.bundle||S.bundle.role!=="admin")return;
+  const miss=(S.bundle.places||[]).filter(p=>!S.geo[p.id]);if(!miss.length)return;S.geoSt.busy=true;let n=0;
+  try{for(const p of miss){
+      const qs=[[p.street,p.zip+" "+p.city],[p.street,p.city],[p.city]];let hit=null,approx=false;
+      for(let qi=0;qi<qs.length&&!hit;qi++){
+        try{const u="https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=se&q="+encodeURIComponent(qs[qi].filter(Boolean).join(", ")+", Sverige");
+          const r=await fetch(u,{headers:{"Accept-Language":"sv"}});if(r.ok){const j=await r.json();if(j&&j[0]){hit={lat:+(+j[0].lat).toFixed(6),lon:+(+j[0].lon).toFixed(6)};approx=qi===2}}}catch(e){}
+        await new Promise(r=>setTimeout(r,1100))}
+      S.geo[p.id]=hit?Object.assign(hit,approx?{ca:1}:{}):{x:1};n++;S.geoSt.msg="Hämtar adresser på kartan… "+n+" av "+miss.length;if(S.view==="map")drawMap()}
+    S.geoSt.msg=(await geoSave())?"":"Kunde inte spara adresspositionerna (visas ändå).";}
+  catch(e){S.geoSt.msg="Kunde inte hämta adresser."}finally{S.geoSt.busy=false;if(S.view==="map")render()}}
 /* kontor: karta */
 async function loadPos(){if(!S.bundle||S.bundle.role!=="admin"||!S.bundle.planKey||!S.bundle.status)return;const st=S.bundle.status;
   for(const pc of (S.bundle.planCars||[])){if(!pc.dir)continue;
@@ -1314,25 +1337,29 @@ async function loadPos(){if(!S.bundle||S.bundle.role!=="admin"||!S.bundle.planKe
 const ago=ts=>{const m=Math.round((Date.now()-ts)/6e4);return m<1?"just nu":m<60?m+" min sedan":m<1440?Math.round(m/60)+" h sedan":Math.round(m/1440)+" dygn sedan"};
 const CARCOL=["#1f77d0","#d9531e","#2e9e4f","#8e44ad"];
 function renderMap(){
-  const cars=(S.bundle.planCars||[]).filter(c=>c.dir);setTimeout(drawMap,0);
+  const cars=(S.bundle.planCars||[]).filter(c=>c.dir);setTimeout(drawMap,0);if(!S.geoSt.busy&&!S.geoTried){S.geoTried=true;loadGeo().then(()=>{drawMap();geoFill()})}
   let h='<div class="pagehead"><h2>Karta</h2><p class="muted">Bilarnas position från surfplattornas GPS. Visas så länge appen är öppen och skärmen på, och platstjänster är påslagna.</p></div>';
-  h+='<div class="card" style="padding:0;overflow:hidden"><div id="gmap" style="position:relative;height:480px;background:#e8e4da;overflow:hidden;touch-action:none"></div><div style="padding:8px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn small" data-mp="in">＋</button><button class="btn small" data-mp="out">－</button><button class="btn small" data-mp="fit">Visa alla bilar</button><span class="muted" style="font-size:12px;margin-left:auto">© OpenStreetMap-bidragsgivare</span></div></div>';
+  h+='<div class="card" style="padding:0;overflow:hidden"><div id="gmap" style="position:relative;height:480px;background:#e8e4da;overflow:hidden;touch-action:none"></div><div style="padding:8px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn small" data-mp="in">＋</button><button class="btn small" data-mp="out">－</button><button class="btn small" data-mp="fit">Visa alla bilar</button><button class="btn small" data-mp="fitall">Visa alla adresser</button><label style="display:flex;gap:6px;align-items:center;font-size:14px"><input type="checkbox" data-mp="pl"'+(S.mapPl?' checked':'')+'> Adresser</label><span class="muted" style="font-size:12px">'+esc(S.geoSt.msg||"")+'</span><span class="muted" style="font-size:12px;margin-left:auto">© OpenStreetMap-bidragsgivare</span></div></div>';
   h+='<div class="tiles" style="margin-top:12px">'+cars.map((c,i)=>{const p=S.pos[c.dir],old=p&&Date.now()-p.ts>15*6e4;
     return '<div class="tile"'+(old?' style="opacity:.7"':'')+'><span class="k"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:'+CARCOL[i%4]+';margin-right:6px"></span>'+esc(c.name)+(p&&p.forare?' · '+esc(p.forare.split(" ")[0]):'')+'</span>'+
       (p?'<span class="v" style="font-size:18px">'+esc(ago(p.ts))+'</span><span class="muted" style="font-size:13px">'+(p.spd!=null?p.spd+' km/h · ':'')+'noggrannhet ±'+p.acc+' m'+(old?' · <b>gammal position</b>':'')+'</span><a href="https://www.google.com/maps?q='+p.lat+','+p.lon+'" target="_blank" style="font-size:14px">Öppna i Google Maps</a>':'<span class="v" style="font-size:16px">Ingen position</span><span class="muted" style="font-size:13px">Surfplattan har inte skickat plats än – öppna appen och tryck "Slå på plats".</span>')+'</div>'}).join("")+'</div>';
   return h}
 function drawMap(){const el=document.getElementById("gmap");if(!el)return;const W=el.clientWidth||800,H=el.clientHeight||480,cars=(S.bundle.planCars||[]).filter(c=>c.dir);
   const pts=cars.map((c,i)=>({c,i,p:S.pos[c.dir]})).filter(x=>x.p);
-  if(!pts.length){el.innerHTML='<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#555;text-align:center;padding:20px">Inga positioner än. De visas här när en surfplatta skickar sin plats.</div>';return}
+  const pls=S.mapPl?(S.bundle.places||[]).map(p=>({p,g:S.geo[p.id]})).filter(x=>x.g&&x.g.lat):[];
+  const fitPts=(S.mfitAll||!pts.length)?pts.map(q=>({lat:q.p.lat,lon:q.p.lon})).concat(pls.map(q=>q.g)):pts.map(q=>({lat:q.p.lat,lon:q.p.lon}));
+  if(!fitPts.length){el.innerHTML='<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#555;text-align:center;padding:20px">Inga positioner än. De visas här när en surfplatta skickar sin plats.</div>';return}
   const wx=(lon,z)=>(lon+180)/360*256*2**z,wy=(lat,z)=>{const r=lat*Math.PI/180;return (1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*256*2**z};
-  let z=S.mz;if(z==null){for(z=16;z>3;z--){const xs=pts.map(q=>wx(q.p.lon,z)),ys=pts.map(q=>wy(q.p.lat,z));if(Math.max(...xs)-Math.min(...xs)<W-160&&Math.max(...ys)-Math.min(...ys)<H-160)break}}
-  z=Math.max(3,Math.min(18,z));S.mzc=z;const xs=pts.map(q=>wx(q.p.lon,z)),ys=pts.map(q=>wy(q.p.lat,z)),cx=(Math.min(...xs)+Math.max(...xs))/2,cy=(Math.min(...ys)+Math.max(...ys))/2,ox=cx-W/2,oy=cy-H/2;
+  let z=S.mz;if(z==null){for(z=16;z>3;z--){const xs=fitPts.map(q=>wx(q.lon,z)),ys=fitPts.map(q=>wy(q.lat,z));if(Math.max(...xs)-Math.min(...xs)<W-160&&Math.max(...ys)-Math.min(...ys)<H-160)break}}
+  z=Math.max(3,Math.min(18,z));S.mzc=z;const xs=fitPts.map(q=>wx(q.lon,z)),ys=fitPts.map(q=>wy(q.lat,z)),cx=(Math.min(...xs)+Math.max(...xs))/2,cy=(Math.min(...ys)+Math.max(...ys))/2,ox=cx-W/2,oy=cy-H/2;
   let h="";const n=2**z;for(let tx=Math.floor(ox/256);tx<=Math.floor((ox+W)/256);tx++)for(let ty=Math.floor(oy/256);ty<=Math.floor((oy+H)/256);ty++){if(ty<0||ty>=n)continue;h+='<img src="https://tile.openstreetmap.org/'+z+'/'+(((tx%n)+n)%n)+'/'+ty+'.png" style="position:absolute;left:'+Math.round(tx*256-ox)+'px;top:'+Math.round(ty*256-oy)+'px;width:256px;height:256px" alt="">'}
+  pls.forEach(q=>{const x=Math.round(wx(q.g.lon,z)-ox),y=Math.round(wy(q.g.lat,z)-oy),f=q.p.kind==="fyll";
+    h+='<div title="'+esc(q.p.name+" – "+q.p.street+", "+q.p.zip+" "+q.p.city+(q.g.ca?" (ungefärligt läge)":""))+'" style="position:absolute;left:'+(x-6)+'px;top:'+(y-6)+'px;width:12px;height:12px;background:'+(f?'#111':'#6b7280')+';border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.5);'+(q.g.ca?'opacity:.6;':'')+'"></div>'+((f||z>=9)?'<div style="position:absolute;left:'+(x+9)+'px;top:'+(y-8)+'px;font:600 11px system-ui;color:#111;background:rgba(255,255,255,.8);padding:0 4px;border-radius:3px;white-space:nowrap">'+esc(q.p.name)+'</div>':'')});
   pts.forEach(q=>{(q.p.trail||[]).forEach(t=>{h+='<span style="position:absolute;left:'+Math.round(wx(t[1],z)-ox-3)+'px;top:'+Math.round(wy(t[0],z)-oy-3)+'px;width:6px;height:6px;border-radius:50%;background:'+CARCOL[q.i%4]+';opacity:.45"></span>'});
     const x=Math.round(wx(q.p.lon,z)-ox),y=Math.round(wy(q.p.lat,z)-oy);
     h+='<div style="position:absolute;left:'+(x-11)+'px;top:'+(y-11)+'px;width:22px;height:22px;border-radius:50%;background:'+CARCOL[q.i%4]+';border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.5)"></div><div style="position:absolute;left:'+(x+14)+'px;top:'+(y-12)+'px;background:#fff;color:#111;font:700 13px system-ui;padding:2px 7px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.4);white-space:nowrap">'+esc(q.c.name)+' · '+esc(ago(q.p.ts))+'</div>'});
   el.innerHTML=h}
-document.addEventListener("click",e=>{const t=e.target.closest("[data-mp]");if(!t)return;const a=t.dataset.mp;if(a==="fit")S.mz=null;else S.mz=(S.mzc||12)+(a==="in"?1:-1);drawMap()});
+document.addEventListener("click",e=>{const t=e.target.closest("[data-mp]");if(!t)return;const a=t.dataset.mp;if(a==="pl"){S.mapPl=t.checked;drawMap();return}if(a==="fit"){S.mz=null;S.mfitAll=false}else if(a==="fitall"){S.mz=null;S.mfitAll=true}else S.mz=(S.mzc||12)+(a==="in"?1:-1);drawMap()});
 setInterval(async()=>{if(S.bundle&&S.bundle.role==="admin"&&S.view==="map"&&document.visibilityState==="visible"){await loadPos();render()}},20*1000);
 /* ---------- Felanmälan / verkstad med bilder ---------- */
 const FT={station:"Fel på mack",fel:"Fel på bilen",slap:"Fel på släp / flak",skada:"Skada / olycka",verk:"Behöver verkstad",annat:"Annat"};
