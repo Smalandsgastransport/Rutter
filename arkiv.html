@@ -397,7 +397,7 @@ async function refresh(f){
   S.busy=false;render();
 }
 function days(){if(!S.bundle)return [];const min=iso(new Date(Date.now()-864e5));const all=isOv()?[...new Set([].concat(...S.bundle.cars.map(c=>Object.keys(c.days))))]:Object.keys(S.bundle.days);const r=all.filter(d=>d>=min);if(!isOv()&&!r.includes(today()))r.push(today());return [...new Set(r)].sort()}
-function pickDate(){const ds=days();if(S.date&&ds.includes(S.date)&&(isOv()||S.date>=today()||S.userDate===S.date))return;S.date=ds.find(d=>d>=today())||ds[ds.length-1]||null}
+function pickDate(){const ds=days();if(S.userDate&&S.userDate>=today()&&ds.includes(S.userDate)){S.date=S.userDate;return}if(S.date&&ds.includes(S.date)&&(isOv()||S.date>=today()||S.userDate===S.date))return;S.date=ds.find(d=>d>=today())||ds[ds.length-1]||null}
 function route(){return S.bundle&&!isOv()&&S.date?S.bundle.days[S.date]:null}
 function prefetch(car,r){if(!("caches" in window))return;caches.open("pdf-v2").then(c=>[r.allPdf].concat(r.legs.map(l=>l.pdf)).filter(Boolean).forEach(f=>{const u="data/"+car.dir+"/"+f;c.match(new URL(u,location.href).pathname).then(m=>{if(!m)fetch(u).then(res=>{if(res.ok)c.put(new URL(u,location.href).pathname,res)}).catch(()=>{})})})).catch(()=>{})}
 async function savePdf(file,name){
@@ -1981,11 +1981,11 @@ async function driverPoll(){
     if(sig!==S.nf2.sig){S.nf2.sig=sig;render()}}
   catch(e){}
   finally{S.pollBusy=false}}
-setInterval(driverPoll,10*1000);
+setInterval(driverPoll,60*1000);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")setTimeout(driverPoll,300)});
 
 setInterval(()=>{if(document.visibilityState==="visible"&&S.sess)refresh()},5*60*1000);
-setInterval(async()=>{if(document.visibilityState!=="visible"||!S.bundle)return;if(isOv()){await afterLoad();if(S.fresh){S.fresh=false;render()}}else if(pendingCount()){await sync();render()}},10*1000);
+setInterval(async()=>{if(document.visibilityState!=="visible"||!S.bundle)return;if(isOv()){await afterLoad();if(S.fresh){S.fresh=false;render()}}else if(pendingCount()){await sync();render()}},60*1000);
 window.addEventListener("online",async()=>{if(S.bundle&&S.bundle.role==="driver"){await sync();render()}});
 /* ---------- Arkivappen: sparar körda godsdeklarationer som PDF i en mapp på datorn ---------- */
 S.ak={dir:null,perm:"",files:[],msg:"",busy:false,todo:0};
