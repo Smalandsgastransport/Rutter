@@ -769,6 +769,7 @@ function planCol(c,keep){
   h+=D.legs.length?'<div class="legs">'+D.legs.map((l,i)=>{const L=st.get(l.order+"|lastad"),U=st.get(l.order+"|lossad");
     return '<div class="leg"><div class="legtop"><span class="n">'+String(i+1).padStart(2,"0")+'</span><span class="pills">'+(l.antal>1?'<span class="pill p-antal">Antal '+l.antal+'</span>':'')+'<span class="pill p-type">'+esc(l.uppdrag)+'</span>'+(l.flakPlan&&l.flakPlan.length?'<span class="pill p-antal">Flak '+esc(l.flakPlan.join(" + "))+'</span>':'')+'<span class="pill p-'+esc(l.load)+'">'+esc(LOADS[l.load]||l.load)+' · '+esc(l.mangd)+'</span>'+(L?'<span class="pill p-full">Lastad '+esc(hhmm(L.ts))+'</span>':'')+(U?'<span class="pill p-full">Lossad '+esc(hhmm(U.ts))+'</span>':'')+'</span></div><div class="note"><b>'+esc(l.from.name)+'</b> → <b>'+esc(l.to.name)+'</b></div>'+(l.note?'<div class="note">'+esc(l.note)+'</div>':'')+
       '<div class="acts"><button class="btn small" data-plup="'+i+'"'+(i?'':' disabled')+'>↑</button><button class="btn small" data-pldown="'+i+'"'+(i<D.legs.length-1?'':' disabled')+'>↓</button><button class="btn small" data-pledit="'+i+'">Ändra</button>'+(l.load==="full"&&!D.legs.some(x=>x.load==="tom"&&x.from.name===l.to.name&&x.to.name===l.from.name)?'<button class="btn small go" data-plretur="'+i+'">Lägg till retur</button>':'')+'<button class="btn link" data-pldel="'+i+'">Radera</button></div></div>'}).join("")+'</div>':'<p class="muted" style="margin:0">Inga transporter än för den här dagen.</p>';
+  geoInit();h+=kmEst(D.legs);
   h+=(D.legs.length?'':'<div><button class="btn" data-plcopy="1">Kopiera gårdagens rutt</button> <button class="btn" data-plcopy="7">Kopiera från förra veckan</button></div>');
   h+=F?'<div class="card" style="display:flex;flex-direction:column;gap:10px"><b>'+(F.idx!=null?'Ändra transport':'Ny transport')+'</b>'+
     '<label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Hämta<select id="plFrom" '+sel+'>'+plOpts(F.from)+'</select></label><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Lämna<select id="plTo" '+sel+'>'+plOpts(F.to)+'</select></label>'+
@@ -1068,18 +1069,62 @@ async function flushFlak(){
   if(S.fk.busy)return;const q=fkQ();if(!q.length)return;S.fk.busy=true;
   try{await saveFlak(loc=>q.forEach(x=>{if(x.v)loc[x.nr]=x.v;else delete loc[x.nr]}));store.set("fkq",JSON.stringify(fkQ().slice(q.length)));S.fk.err=""}catch(e){S.fk.err=(e&&e.message)||"okänt fel"}
   finally{S.fk.busy=false}}
+const SLOTS={"Påfyllning Alvesta":["Plats 1","Plats 2","Plats 3","Plats 4","Plats 5","Plats 6","Plats 7","Plats 8","Trailer 5"],
+  "Påfyllning Målilla":["Målilla 1","Målilla 2","Farmen (Hagelsrum) 1","Farmen (Hagelsrum) 2","Farmen (Hagelsrum) 3"],"Påfyllning Sävsjö":["Plats 1","Plats 2"],"Påfyllning Jönköping":["Plats 1","Plats 2"]};
+const slotOf=n=>((S.fk.loc||{})[n]||{}).slot||"";
+function slotMap(place){const m={};Object.keys(S.fk.loc||{}).forEach(n=>{const v=S.fk.loc[n]||{};if(v.p===place&&v.slot)(m[v.slot]=m[v.slot]||[]).push(n)});return m}
+function slotDupes(){const out=[];Object.keys(SLOTS).forEach(pl=>{const m=slotMap(pl);Object.keys(m).filter(k=>m[k].length>1).forEach(k=>out.push({place:pl,slot:k,nrs:m[k].sort((a,b)=>(+a||0)-(+b||0))}))});return out}
+function slotAlarm(){const d=slotDupes();if(!d.length)return "";
+  return '<div class="notice warn" style="margin-bottom:12px;border:2px solid #d03a3a"><b style="color:#d03a3a">⚠ LARM – flera flak på samma flakplats</b><br>'+d.map(x=>esc(x.place)+', '+esc(x.slot)+': flak '+x.nrs.map(esc).join(" och ")).join("<br>")+'<br><span style="font-size:14px">Kontrollera vad som hänt (fel plats angiven eller flak som flyttats utan att registreras). Rätta under fliken Flak.</span></div>'}
+function slotGrid(place){const m=slotMap(place),noSlot=Object.keys(S.fk.loc||{}).filter(n=>(S.fk.loc[n]||{}).p===place&&!slotOf(n));
+  let h='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:8px">';
+  SLOTS[place].forEach(k=>{const l=m[k]||[],bad=l.length>1;h+='<div style="border:2px solid '+(bad?'#d03a3a':l.length?'#2a7d46':'var(--line)')+';border-radius:6px;padding:8px;background:'+(bad?'rgba(208,58,58,.12)':'var(--surface)')+'"><div class="muted" style="font-size:12px">'+esc(k)+'</div><div style="font-size:19px;font-weight:700">'+(l.length?l.map(esc).join(" + "):'<span class="muted" style="font-weight:400">ledig</span>')+'</div></div>'});
+  return h+'</div>'+(noSlot.length?'<div class="muted" style="font-size:13px;margin-top:6px">Står här men utan angiven plats: '+noSlot.map(esc).join(", ")+'</div>':'')}
+function slotGrids(){return Object.keys(SLOTS).map(pl=>'<div style="margin-top:12px"><b>'+esc(pl)+'</b>'+slotGrid(pl)+'</div>').join("")}
+function slotLabel(n){const v=(S.fk.loc||{})[n]||{};return SLOTS[v.p]&&v.slot?" · "+v.slot:""}
+/* chauffören lämnar flak på en påfyllning med flakplatser: välj plats */
+async function slotNeeded(order){
+  const r=route();if(!r)return false;const l=allLegs(S.bundle.dir,r.date,r.legs).find(x=>x.order===order);
+  if(!l||!l.to||!SLOTS[l.to.name])return false;const f=lastFlak(statesFor(S.bundle.dir,r.date).get(order+"|lastad"));if(!f||!f.length)return false;
+  try{await loadFlak()}catch(e){}
+  S.slotF={order,place:l.to.name,nrs:f.map(x=>x.nr),sel:{},warn:""};slotModal();return true}
+function slotModal(){const old=document.getElementById("slotm");if(old)old.remove();const F=S.slotF;if(!F)return;
+  const m=slotMap(F.place),defs=SLOTS[F.place];
+  const o=document.createElement("div");o.id="slotm";o.style.cssText="position:fixed;inset:0;z-index:70;background:var(--bg);overflow:auto;padding:14px;display:flex;flex-direction:column;gap:12px";
+  o.innerHTML='<b style="font-size:21px">Var ställde du flaket på '+esc(F.place)+'?</b><div class="muted" style="font-size:15px">Välj flakplats.</div>'+
+    F.nrs.map(n=>'<div class="card"><b style="font-size:19px">Flak '+esc(n)+'</b><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px">'+
+      defs.map(k=>{const occ=(m[k]||[]).filter(x=>x!==n),on=F.sel[n]===k;
+        return '<button data-slot="'+esc(n+"|"+k)+'" style="font:inherit;font-size:18px;padding:12px 4px;border-radius:6px;border:2px solid '+(on?'#2a7d46':'var(--line)')+';background:'+(on?'#2a7d46':occ.length?'rgba(208,58,58,.15)':'var(--surface)')+';color:'+(on?'#fff':'var(--fg)')+'">'+esc(k)+'<br><small>'+(occ.length?esc(occ.join("+")):'ledig')+'</small></button>'}).join("")+'</div></div>').join("")+
+    (F.warn?'<div class="notice warn" style="font-size:17px"><b>⚠ '+esc(F.warn)+'</b></div>':'')+
+    '<div class="acts"><button class="btn go" data-slot="ok">'+(F.warn&&!F.hard?'Ja, ställ det där ändå':'Spara och markera lossad')+'</button><button class="btn" data-slot="cancel">Avbryt</button></div>';
+  document.body.appendChild(o)}
+document.addEventListener("click",async e=>{const t=e.target.closest("[data-slot]");if(!t||!S.slotF)return;const F=S.slotF,v=t.dataset.slot;
+  if(v==="cancel"){S.slotF=null;slotModal();return}
+  if(v==="ok"){
+    const miss=F.nrs.filter(n=>!F.sel[n]);if(miss.length){F.warn="Välj flakplats för flak "+miss.join(", ")+".";F.hard=true;slotModal();return}
+    const used={};for(const n of F.nrs){if(used[F.sel[n]]){F.warn="Flak "+used[F.sel[n]]+" och "+n+" kan inte stå på samma plats ("+F.sel[n]+").";F.hard=true;slotModal();return}used[F.sel[n]]=n}
+    const m=slotMap(F.place),c=[];F.nrs.forEach(n=>(m[F.sel[n]]||[]).filter(x=>x!==n&&F.nrs.indexOf(x)<0).forEach(x=>c.push("Flak "+x+" står redan på "+F.sel[n]+". Är du säker på att du vill ställa flak "+n+" där?")));
+    if(c.length&&!F.okc){F.warn=c.join(" ");F.okc=true;F.hard=false;slotModal();return}
+    const sl={};F.nrs.forEach(n=>sl[n]=F.sel[n]);S.slotF=null;slotModal();await lossadGo(F.order,sl);return}
+  const k=v.indexOf("|"),n=v.slice(0,k),sv=v.slice(k+1);F.sel[n]=sv;F.warn="";F.hard=false;F.okc=false;slotModal()});
+async function lossadGo(order,slots){
+  await record("lossad",order,slots?{slots}:{});
+  S.dk.hlast=Date.now();dkHist().then(()=>render()).catch(()=>{});
+  try{const r0=route(),l0=r0&&allLegs(S.bundle.dir,r0.date,r0.legs).find(x=>x.order===order),f=l0&&lastFlak(statesFor(S.bundle.dir,r0.date).get(l0.order+"|lastad"));
+    if(f&&l0.to&&l0.to.name)flakMove(f.map(x=>({nr:x.nr,v:Object.assign({p:l0.to.name,ts:Date.now(),by:S.bundle.car&&S.bundle.car.name},slots&&slots[x.nr]?{slot:slots[x.nr]}:{})}))).catch(()=>{})}catch(x){}
+  toast("Lossad "+hhmm(new Date().toISOString())+".")}
 const flakAt=place=>Object.keys(S.fk.loc||{}).filter(n=>(S.fk.loc[n]||{}).p===place).sort((a,b)=>(+a||0)-(+b||0)||a.localeCompare(b));
-function flakWhere(nr){const v=(S.fk.loc||{})[flNr(nr)];return v?(v.p?v.p:(v.car?"på "+v.car+(v.from?" (hämtad från "+v.from+")":""):"")):""}
+function flakWhere(nr){const v=(S.fk.loc||{})[flNr(nr)];return v?(v.p?v.p+(v.slot&&SLOTS[v.p]?" ("+v.slot+")":""):(v.car?"på "+v.car+(v.from?" (hämtad från "+v.from+")":""):"")):""}
 function flakChips(place){const l=flakAt(place);
-  return '<div class="muted" style="font-size:14px"><b>Flak som står på '+esc(place)+'</b>'+(l.length?' – tryck för att välja:':' – inga registrerade än (skriv numret själv).')+'</div>'+(l.length?'<div style="display:flex;flex-wrap:wrap;gap:8px">'+l.map(n=>'<button class="chip" data-lfpick="'+esc(n)+'" style="font-size:18px;padding:10px 14px">'+esc(n)+(isGehab(n)?' <small style="color:#b25e00">Gehab</small>':'')+'</button>').join("")+'</div>':'')}
+  return '<div class="muted" style="font-size:14px"><b>Flak som står på '+esc(place)+'</b>'+(l.length?' – tryck för att välja:':' – inga registrerade än (skriv numret själv).')+'</div>'+(l.length?'<div style="display:flex;flex-wrap:wrap;gap:8px">'+l.map(n=>'<button class="chip" data-lfpick="'+esc(n)+'" style="font-size:18px;padding:10px 14px">'+esc(n)+(slotLabel(n)?' <small>'+esc(slotLabel(n).slice(3))+'</small>':'')+(isGehab(n)?' <small style="color:#b25e00">Gehab</small>':'')+'</button>').join("")+'</div>':'')}
 function gehabWarn(nrs){const g=nrs.filter(isGehab);if(!g.length)return "";return (g.length>1?'⚠ Två Gehab-flak ('+g.join(", ")+') får inte åka samtidigt. ':'')+'Gehab-flak ('+g.join(", ")+') får bara stå på bilen, aldrig på släpet.'}
 function renderFlak(){
   const B=S.bundle,V=S.fkv,places=(B.places||[]),loc=S.fk.loc||{},all=Object.keys(loc);
   const fst=S.fk.st,stl=fst?(fst.ok?'<span class="muted" style="font-size:13px">Listan hämtad '+esc(hhmm(new Date(fst.ts).toISOString()))+(fst.empty?' (tom)':'')+'</span>':'<span style="color:#d03a3a;font-size:13px">⚠ '+esc(fst.msg)+'</span>'):'';
   let h='<div class="pagehead"><h2>Flak</h2><p class="muted">Var varje flak står just nu. Uppdateras av förarna när de lastar och lossar. Gehab-flak ('+GEHAB.join(", ")+') får bara åka på bilen, inte på släpet. '+stl+(fkQ().length?' <b style="color:#d03a3a">'+fkQ().length+' ändringar väntar på att sparas.'+(S.fk.err?' Senaste fel: '+esc(S.fk.err):'')+'</b> <button class="btn small" data-fk="retry">Försök spara igen</button>':'')+'</p></div>';
   const sel='style="font:inherit;font-size:16px;padding:8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg)"';
-  h+='<div class="card" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end"><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Flaknummer (ett eller flera, t.ex. 158, 145)<input id="fkNr" value="'+esc(V.nr)+'" '+sel+'></label><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Står på<select id="fkTo" '+sel+'>'+plOpts(V.to)+'</select></label><button class="btn go" data-fk="set">Flytta hit</button><button class="btn" data-fk="del">Ta bort flak ur listan</button><button class="btn link" data-fk="clear" style="color:#d03a3a">'+(S.fkArm?'Tryck igen för att RENSA HELA LISTAN':'Rensa hela listan')+'</button></div>'+(V.msg?'<div class="notice">'+esc(V.msg)+'</div>':'');
-  const gl=GEHAB.filter(n=>true);
+  h+='<div class="card" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end"><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Flaknummer (ett eller flera, t.ex. 158, 145)<input id="fkNr" value="'+esc(V.nr)+'" '+sel+'></label><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Står på<select id="fkTo" '+sel+'>'+plOpts(V.to)+'</select></label><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Flakplats<select id="fkSlot" '+sel+'><option value="">–</option>'+Object.keys(SLOTS).map(pl=>'<optgroup label="'+esc(pl)+'">'+SLOTS[pl].map(k=>'<option value="'+esc(pl+"|"+k)+'">'+esc(k)+'</option>').join("")+'</optgroup>').join("")+'</select></label><button class="btn go" data-fk="set">Flytta hit</button><button class="btn" data-fk="del">Ta bort flak ur listan</button><button class="btn link" data-fk="clear" style="color:#d03a3a">'+(S.fkArm?'Tryck igen för att RENSA HELA LISTAN':'Rensa hela listan')+'</button></div>'+(V.msg?'<div class="notice">'+esc(V.msg)+'</div>':'');
+  const gl=GEHAB.filter(n=>true);h+='<div class="card" style="margin-top:12px"><b>Flakplatser</b>'+slotGrids()+'</div>';
   h+='<div class="card" style="margin-top:12px"><b>Gehab-flak</b><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">'+gl.map(n=>'<span class="pill p-type">'+n+': '+esc(flakWhere(n)||"okänd plats")+'</span>').join("")+'</div></div>';
   const groups={};all.forEach(n=>{const v=loc[n]||{},k=v.p||(v.car?"På bil: "+v.car:"Okänd");(groups[k]=groups[k]||[]).push(n)});
   const keys=Object.keys(groups).sort();
@@ -1091,7 +1136,7 @@ document.addEventListener("click",async e=>{const t=e.target.closest("[data-fk]"
   S.fkArm=false;const V=S.fkv,nrs=String((document.getElementById("fkNr")||{}).value||"").split(/[^0-9A-Za-z]+/).map(flNr).filter(Boolean),to=(document.getElementById("fkTo")||{}).value||"";V.nr=nrs.join(", ");V.to=to;
   const pl=(S.bundle.places||[]).find(p=>p.id===to);
   if(!nrs.length){V.msg="Skriv minst ett flaknummer.";render();return}
-  if(t.dataset.fk==="set"){if(!pl){V.msg="Välj plats.";render();return}S.fk.err="";await flakMove(nrs.map(n=>({nr:n,v:{p:pl.name,ts:Date.now(),by:"kontoret"}})));V.msg=S.fk.err?"⚠ INTE SPARAT på servern: "+S.fk.err+". Försök igen (flaken ligger i kö på den här datorn).":"✓ Sparat på servern: "+nrs.join(", ")+" står på "+pl.name+". Förarna ser det efter nästa uppdatering.";V.nr=""}
+  if(t.dataset.fk==="set"){if(!pl){V.msg="Välj plats.";render();return}S.fk.err="";await flakMove(nrs.map(n=>({nr:n,v:Object.assign({p:pl.name,ts:Date.now(),by:"kontoret"},(()=>{const sv=String((document.getElementById("fkSlot")||{}).value||"").split("|");return SLOTS[pl.name]&&sv[0]===pl.name&&sv[1]?{slot:sv[1]}:{}})())})));V.msg=S.fk.err?"⚠ INTE SPARAT på servern: "+S.fk.err+". Försök igen (flaken ligger i kö på den här datorn).":"✓ Sparat på servern: "+nrs.join(", ")+" står på "+pl.name+". Förarna ser det efter nästa uppdatering.";V.nr=""}
   else{S.fk.err="";await flakMove(nrs.map(n=>({nr:n,v:null})));V.msg=S.fk.err?"⚠ INTE SPARAT: "+S.fk.err:"✓ Tog bort "+nrs.join(", ")+" ur listan.";V.nr=""}
   render()});
 document.addEventListener("click",e=>{const t=e.target.closest("[data-lfpick]");if(!t||!S.lastForm)return;readLast();const F=S.lastForm,n=t.dataset.lfpick,legN=(F.antal||1);let i=F.nr.findIndex((x,j)=>j<legN&&!(x||"").trim());if(i<0)i=legN-1;F.nr[i]=n;const inp=document.querySelector('[data-lfn="'+i+'"]');if(inp)inp.value=n;render()});
@@ -1205,7 +1250,7 @@ function flakView(){
   const o=document.createElement("div");o.id="fkview";o.style.cssText="position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column;padding:12px;gap:10px;overflow:auto";
   o.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:19px">Var står flaken?</b><button class="btn" data-fv="close">Stäng</button></div><div class="muted" style="font-size:14px">Uppdateras när chaufförerna lastar och lossar. Gehab-flak ('+GEHAB.join(", ")+') får bara åka på bilen, inte på släpet.</div>'+(S.fk.st?(S.fk.st.ok?'<div class="muted" style="font-size:13px">Hämtad '+esc(hhmm(new Date(S.fk.st.ts).toISOString()))+(S.fk.st.empty?' – kontoret har inte lagt in några flak än.':'')+'</div>':'<div class="notice warn">⚠ '+esc(S.fk.st.msg)+' – visar senast sparade lista.</div>'):'')+'<input id="fkq" value="'+esc(S.fkq||"")+'" placeholder="Sök flaknummer eller plats…" style="font:inherit;font-size:17px;padding:10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg)">'+
     '<div class="card"><b>Gehab-flak</b><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">'+GEHAB.map(n=>'<span class="pill p-antal">'+n+': '+esc(loc[n]?where(n):"okänd plats")+'</span>').join("")+'</div></div>'+
-    (keys.length?keys.map(k=>'<div class="card"><b>'+esc(k)+' <span class="muted">('+groups[k].length+')</span></b><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">'+groups[k].sort((a,b)=>(+a||0)-(+b||0)).map(n=>'<span class="pill '+(isGehab(n)?'p-antal':'p-type')+'" style="font-size:17px;padding:8px 12px">'+esc(n)+(isGehab(n)?' G':'')+'</span>').join("")+'</div></div>').join(""):'<div class="card muted">Inga flak hittades.</div>');
+    (keys.length?keys.map(k=>'<div class="card"><b>'+esc(k)+' <span class="muted">('+groups[k].length+')</span></b><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">'+groups[k].sort((a,b)=>(+a||0)-(+b||0)).map(n=>'<span class="pill '+(isGehab(n)?'p-antal':'p-type')+'" style="font-size:17px;padding:8px 12px">'+esc(n)+(isGehab(n)?' G':'')+esc(slotLabel(n))+'</span>').join("")+'</div></div>').join(""):'<div class="card muted">Inga flak hittades.</div>');
   document.body.appendChild(o);const i=document.getElementById("fkq");if(q&&i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}}
 document.addEventListener("click",async e=>{const t=e.target.closest("[data-fv]");if(!t)return;
   if(t.dataset.fv==="close"){const o=document.getElementById("fkview");if(o)o.remove();return}
@@ -1274,8 +1319,8 @@ function flakDerive(){const out={};
     Object.keys(S.plans).forEach(k=>{if(k.indexOf(pc.dir+"|")!==0)return;const d=k.slice(pc.dir.length+1);if(d<START)return;const p=S.plans[k];if(!p||!p.legs||!p.legs.length)return;
       const st=statesFor(pc.dir,d);
       allLegs(pc.dir,d,planToRoute(p).legs).forEach(l=>{if(l.deleted)return;const e=st.get(l.order+"|lastad"),f=lastFlak(e);if(!f)return;const U=st.get(l.order+"|lossad");
-        const ts=U?U.ts:e.ts;if(ts<=(S.fk.clear||0))return;const v=U?{p:l.to.name,ts,by:pc.name||"bil"}:{car:pc.name||"bil",from:l.from.name,ts};
-        f.forEach(x=>{const nr=flNr(x.nr);if(nr&&(!out[nr]||out[nr].ts<ts))out[nr]=v})})})});
+        const ts=U?U.ts:e.ts;if(ts<=(S.fk.clear||0))return;const sl=U?(evData(U).slots||{}):{};
+        f.forEach(x=>{const nr=flNr(x.nr);const v=U?Object.assign({p:l.to.name,ts,by:pc.name||"bil"},sl[x.nr]?{slot:sl[x.nr]}:{}):{car:pc.name||"bil",from:l.from.name,ts};if(nr&&(!out[nr]||out[nr].ts<ts))out[nr]=v})})})});
   return out}
 async function flakSyncFromEvents(){
   try{await loadFlak();const dv=flakDerive(),items=[];
@@ -1330,6 +1375,26 @@ async function geoFill(){if(S.geoSt.busy||!S.bundle||S.bundle.role!=="admin")ret
       S.geo[p.id]=hit?Object.assign(hit,approx?{ca:1}:{}):{x:1};n++;S.geoSt.msg="Hämtar adresser på kartan… "+n+" av "+miss.length;if(S.view==="map")drawMap()}
     S.geoSt.msg=(await geoSave())?"":"Kunde inte spara adresspositionerna (visas ändå).";}
   catch(e){S.geoSt.msg="Kunde inte hämta adresser."}finally{S.geoSt.busy=false;if(S.view==="map")render()}}
+function geoInit(){if(S.geoTried||!S.bundle||S.bundle.role!=="admin")return;S.geoTried=true;loadGeo().then(()=>{S.geoLoaded=true;if(S.view==="map")drawMap();geoFill().then(()=>{if(S.view==="plan"||S.view==="map")render()})})}
+/* körsträckor (OSRM, personbil-profil) mellan våra adresser, sparas i samma krypterade fil */
+S.kmWant=new Set();S.kmBusy=false;S.kmBad={};
+const plByName=n=>(S.bundle.places||[]).find(p=>p.name===n);
+const kmKey=(a,b)=>"r:"+a+">"+b;
+async function kmRun(){if(S.kmBusy||!S.kmWant.size)return;S.kmBusy=true;let n=0;
+  try{for(const k of [...S.kmWant]){S.kmWant.delete(k);if(S.geo[k])continue;const [a,b]=k.slice(2).split(">"),ga=S.geo[a],gb=S.geo[b];if(!ga||!ga.lat||!gb||!gb.lat)continue;
+      try{const r=await fetch("https://router.project-osrm.org/route/v1/driving/"+ga.lon+","+ga.lat+";"+gb.lon+","+gb.lat+"?overview=false");const j=await r.json();
+        if(j&&j.routes&&j.routes[0]){S.geo[k]={km:Math.round(j.routes[0].distance/100)/10,min:Math.round(j.routes[0].duration/60)};n++}else S.kmBad[k]=1}catch(e){S.kmBad[k]=1}
+      await new Promise(r=>setTimeout(r,600));if(n&&n%5===0&&S.view==="plan")render()}
+    if(n)await geoSave()}catch(e){}finally{S.kmBusy=false;if(n&&S.view==="plan")render()}}
+function kmEst(legs,base){
+  const ids=[];const add=(nm)=>{const pl=plByName(nm);return pl?pl.id:null};
+  let seq=[],unk=0;legs.forEach(l=>{const a=add(l.from.name),b=add(l.to.name);if(!a||!b){unk++;return}seq.push([a,b])});
+  const hops=[];seq.forEach((x,i)=>{hops.push([x[0],x[1],"leg"]);if(i<seq.length-1&&x[1]!==seq[i+1][0])hops.push([x[1],seq[i+1][0],"mellan"])});
+  let km=0,min=0,miss=0;hops.forEach(h=>{const k=kmKey(h[0],h[1]),v=S.geo[k];if(v){km+=v.km;min+=v.min}else if(h[0]===h[1]){}else{miss++;if(!S.kmBad[k]&&S.geo[h[0]]&&S.geo[h[0]].lat&&S.geo[h[1]]&&S.geo[h[1]].lat)S.kmWant.add(k)}});
+  if(S.kmWant.size)setTimeout(kmRun,50);
+  if(!legs.length)return "";
+  const hm=m=>Math.floor(m/60)+" h "+String(m%60).padStart(2,"0")+" min";
+  return '<div class="muted" style="font-size:14px;border-top:1px solid var(--line);padding-top:8px"><b>Uppskattad körsträcka:</b> '+(miss||S.kmWant.size?(km?'ca '+Math.round(km)+' km hittills – beräknar resten…':'beräknar…'):'ca '+Math.round(km)+' km · ca '+hm(min)+' körtid')+(unk?' <span title="Adresser som inte finns i adresslistan räknas inte">('+unk+' transport(er) utan känd adress)</span>':'')+'<br><span style="font-size:12px">Från hämtning till lossning och mellan transporterna, exkl. start/slut från bilens bas, raster och lastning. Beräknat för personbil – tung bil kan ta något längre.</span></div>'}
 /* kontor: karta */
 async function loadPos(){if(!S.bundle||S.bundle.role!=="admin"||!S.bundle.planKey||!S.bundle.status)return;const st=S.bundle.status;
   for(const pc of (S.bundle.planCars||[])){if(!pc.dir)continue;
@@ -1337,12 +1402,16 @@ async function loadPos(){if(!S.bundle||S.bundle.role!=="admin"||!S.bundle.planKe
 const ago=ts=>{const m=Math.round((Date.now()-ts)/6e4);return m<1?"just nu":m<60?m+" min sedan":m<1440?Math.round(m/60)+" h sedan":Math.round(m/1440)+" dygn sedan"};
 const CARCOL=["#1f77d0","#d9531e","#2e9e4f","#8e44ad"];
 function renderMap(){
-  const cars=(S.bundle.planCars||[]).filter(c=>c.dir);setTimeout(drawMap,0);if(!S.geoSt.busy&&!S.geoTried){S.geoTried=true;loadGeo().then(()=>{drawMap();geoFill()})}
+  const cars=(S.bundle.planCars||[]).filter(c=>c.dir);setTimeout(drawMap,0);geoInit();if(!S.fkMapTried){S.fkMapTried=true;loadFlak().then(()=>{if(S.view==="map")render()}).catch(()=>{})}
   let h='<div class="pagehead"><h2>Karta</h2><p class="muted">Bilarnas position från surfplattornas GPS. Visas så länge appen är öppen och skärmen på, och platstjänster är påslagna.</p></div>';
   h+='<div class="card" style="padding:0;overflow:hidden"><div id="gmap" style="position:relative;height:480px;background:#e8e4da;overflow:hidden;touch-action:none"></div><div style="padding:8px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn small" data-mp="in">＋</button><button class="btn small" data-mp="out">－</button><button class="btn small" data-mp="fit">Visa alla bilar</button><button class="btn small" data-mp="fitall">Visa alla adresser</button><label style="display:flex;gap:6px;align-items:center;font-size:14px"><input type="checkbox" data-mp="pl"'+(S.mapPl?' checked':'')+'> Adresser</label><span class="muted" style="font-size:12px">'+esc(S.geoSt.msg||"")+'</span><span class="muted" style="font-size:12px;margin-left:auto">© OpenStreetMap-bidragsgivare</span></div></div>';
   h+='<div class="tiles" style="margin-top:12px">'+cars.map((c,i)=>{const p=S.pos[c.dir],old=p&&Date.now()-p.ts>15*6e4;
     return '<div class="tile"'+(old?' style="opacity:.7"':'')+'><span class="k"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:'+CARCOL[i%4]+';margin-right:6px"></span>'+esc(c.name)+(p&&p.forare?' · '+esc(p.forare.split(" ")[0]):'')+'</span>'+
       (p?'<span class="v" style="font-size:18px">'+esc(ago(p.ts))+'</span><span class="muted" style="font-size:13px">'+(p.spd!=null?p.spd+' km/h · ':'')+'noggrannhet ±'+p.acc+' m'+(old?' · <b>gammal position</b>':'')+'</span><a href="https://www.google.com/maps?q='+p.lat+','+p.lon+'" target="_blank" style="font-size:14px">Öppna i Google Maps</a>':'<span class="v" style="font-size:16px">Ingen position</span><span class="muted" style="font-size:13px">Surfplattan har inte skickat plats än – öppna appen och tryck "Slå på plats".</span>')+'</div>'}).join("")+'</div>';
+  {const pls2=(S.bundle.places||[]).map(q=>({q,l:flakAt(q.name)})).filter(x=>x.l.length);
+    h+='<div class="card" style="margin-top:12px"><b>Flak per plats</b>'+(Object.keys(S.fk.loc||{}).length?'':' <span class="muted" style="font-size:13px">(flaklistan är tom eller inte hämtad än)</span>')+
+      (pls2.length?pls2.map(x=>'<div style="margin-top:10px"><span class="muted" style="font-weight:600">'+esc(x.q.name)+' ('+x.l.length+')</span><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">'+x.l.map(n=>'<span class="pill p-type">'+esc(n)+(SLOTS[x.q.name]&&slotOf(n)?' · '+esc(slotOf(n)):'')+'</span>').join("")+'</div></div>').join(""):'<p class="muted">Inga flak står på någon registrerad adress just nu.</p>')+
+      '<div style="margin-top:14px"><b>Flakplatser</b>'+slotGrids()+'</div></div>'}
   return h}
 function drawMap(){const el=document.getElementById("gmap");if(!el)return;const W=el.clientWidth||800,H=el.clientHeight||480,cars=(S.bundle.planCars||[]).filter(c=>c.dir);
   const pts=cars.map((c,i)=>({c,i,p:S.pos[c.dir]})).filter(x=>x.p);
@@ -1353,8 +1422,8 @@ function drawMap(){const el=document.getElementById("gmap");if(!el)return;const 
   let z=S.mz;if(z==null){for(z=16;z>3;z--){const xs=fitPts.map(q=>wx(q.lon,z)),ys=fitPts.map(q=>wy(q.lat,z));if(Math.max(...xs)-Math.min(...xs)<W-160&&Math.max(...ys)-Math.min(...ys)<H-160)break}}
   z=Math.max(3,Math.min(18,z));S.mzc=z;const xs=fitPts.map(q=>wx(q.lon,z)),ys=fitPts.map(q=>wy(q.lat,z)),cx=(Math.min(...xs)+Math.max(...xs))/2,cy=(Math.min(...ys)+Math.max(...ys))/2,ox=cx-W/2,oy=cy-H/2;
   let h="";const n=2**z;for(let tx=Math.floor(ox/256);tx<=Math.floor((ox+W)/256);tx++)for(let ty=Math.floor(oy/256);ty<=Math.floor((oy+H)/256);ty++){if(ty<0||ty>=n)continue;h+='<img src="https://tile.openstreetmap.org/'+z+'/'+(((tx%n)+n)%n)+'/'+ty+'.png" style="position:absolute;left:'+Math.round(tx*256-ox)+'px;top:'+Math.round(ty*256-oy)+'px;width:256px;height:256px" alt="">'}
-  pls.forEach(q=>{const x=Math.round(wx(q.g.lon,z)-ox),y=Math.round(wy(q.g.lat,z)-oy),f=q.p.kind==="fyll";
-    h+='<div title="'+esc(q.p.name+" – "+q.p.street+", "+q.p.zip+" "+q.p.city+(q.g.ca?" (ungefärligt läge)":""))+'" style="position:absolute;left:'+(x-6)+'px;top:'+(y-6)+'px;width:12px;height:12px;background:'+(f?'#111':'#6b7280')+';border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.5);'+(q.g.ca?'opacity:.6;':'')+'"></div>'+((f||z>=9)?'<div style="position:absolute;left:'+(x+9)+'px;top:'+(y-8)+'px;font:600 11px system-ui;color:#111;background:rgba(255,255,255,.8);padding:0 4px;border-radius:3px;white-space:nowrap">'+esc(q.p.name)+'</div>':'')});
+  pls.forEach(q=>{const x=Math.round(wx(q.g.lon,z)-ox),y=Math.round(wy(q.g.lat,z)-oy),f=q.p.kind==="fyll",fl=flakAt(q.p.name);
+    h+='<div title="'+esc(q.p.name+" – "+q.p.street+", "+q.p.zip+" "+q.p.city+(q.g.ca?" (ungefärligt läge)":"")+(fl.length?"\nFlak: "+fl.join(", "):""))+'" style="position:absolute;left:'+(x-6)+'px;top:'+(y-6)+'px;width:12px;height:12px;background:'+(f?'#111':'#6b7280')+';border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.5);'+(q.g.ca?'opacity:.6;':'')+'"></div>'+((f||z>=9||fl.length)?'<div style="position:absolute;left:'+(x+9)+'px;top:'+(y-8)+'px;font:600 11px system-ui;color:#111;background:rgba(255,255,255,.85);padding:0 4px;border-radius:3px;white-space:nowrap">'+esc(q.p.name)+(fl.length?' · <span style="color:#2a7d46">'+fl.length+' flak</span>':'')+'</div>':'')});
   pts.forEach(q=>{(q.p.trail||[]).forEach(t=>{h+='<span style="position:absolute;left:'+Math.round(wx(t[1],z)-ox-3)+'px;top:'+Math.round(wy(t[0],z)-oy-3)+'px;width:6px;height:6px;border-radius:50%;background:'+CARCOL[q.i%4]+';opacity:.45"></span>'});
     const x=Math.round(wx(q.p.lon,z)-ox),y=Math.round(wy(q.p.lat,z)-oy);
     h+='<div style="position:absolute;left:'+(x-11)+'px;top:'+(y-11)+'px;width:22px;height:22px;border-radius:50%;background:'+CARCOL[q.i%4]+';border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.5)"></div><div style="position:absolute;left:'+(x+14)+'px;top:'+(y-12)+'px;background:#fff;color:#111;font:700 13px system-ui;padding:2px 7px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.4);white-space:nowrap">'+esc(q.c.name)+' · '+esc(ago(q.p.ts))+'</div>'});
@@ -2031,7 +2100,7 @@ function render(){
     const cnt=(S.bundle.planCars||[]).reduce((a,c)=>a+notisUnread(c.dir,today()).length+notisUnread(c.dir,iso(new Date(Date.now()+864e5))).length,0)+andringNek();
     const items=[["ov","Översikt",cnt],["plan","Planering",0],["msg","Meddelanden",0],["stat","Stationer",0],["paus","Pauser",0],["ham","Hämtningar",hmOpen()],["fel","Verkstad",felNy()],["ark","Arkiv",0],["map","Karta",0],["flk","Flak",0],["pers","Personal",0],["led","Ledighet",S.led.filter(x=>x.status==="ny").length],["vec","Vecka",0],["mil","Milrapport",0],["sum","Sammanställning",0]];
     const nav='<nav class="side"><div class="sidehd">Kontoret</div>'+items.map(([k,l,n])=>'<button data-view="'+k+'"'+(S.view===k?' aria-current="page"':'')+'><span>'+l+'</span>'+(n?'<i class="badge">'+n+'</i>':'')+'</button>').join("")+'</nav>';
-    M.innerHTML='<div class="shell">'+nav+'<div class="content">'+(S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'</div></div>';return}
+    M.innerHTML='<div class="shell">'+nav+'<div class="content">'+slotAlarm()+(S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'</div></div>';return}
   const ds=days();let h=alertsHtml()+startBar()+gpsCard();
   if(ds.length)h+='<div class="chips">'+ds.map(d=>'<button class="chip" data-date="'+d+'"'+(d===S.date?' aria-current="date"':'')+'>'+esc(dayLabel(d))+' <span>'+(S.bundle.days[d]?S.bundle.days[d].legs.length+' st':'–')+'</span></button>').join("")+'</div>';
   const r=route();
@@ -2157,8 +2226,8 @@ document.addEventListener("click",async e=>{
   if(t.dataset.lastopen){const r0=route(),l0=r0&&r0.legs.find(x=>x.order===t.dataset.lastopen);S.lastForm={order:t.dataset.lastopen,nr:((l0&&l0.flakPlan)||[]).slice(),vol:[],bar:[],ask:false,err:"",antal:(l0&&l0.antal)||1,from:(l0&&l0.from&&l0.from.name)||""};render();return}
   if(t.dataset.lfcancel){S.lastForm=null;render();return}
   if(t.dataset.lfok){const r=route(),l=allLegs(S.bundle.dir,r.date,r.legs).find(x=>x.order===S.lastForm.order);if(l){t.disabled=true;await saveLast(l)}return}
-  if(t.dataset.act){t.disabled=true;await record(t.dataset.act,t.dataset.order);
-    if(t.dataset.act==="lossad"){S.dk.hlast=Date.now();dkHist().then(()=>render()).catch(()=>{});try{const r0=route(),l0=r0&&allLegs(S.bundle.dir,r0.date,r0.legs).find(x=>x.order===t.dataset.order),f=l0&&lastFlak(statesFor(S.bundle.dir,r0.date).get(l0.order+"|lastad"));if(f&&l0.to&&l0.to.name)flakMove(f.map(x=>({nr:x.nr,v:{p:l0.to.name,ts:Date.now(),by:S.bundle.car&&S.bundle.car.name}}))).catch(()=>{})}catch(x){}}toast((NAMES[t.dataset.act]||"Sparat")+" "+hhmm(new Date().toISOString())+".");return}
+  if(t.dataset.act){if(t.dataset.act==="lossad"){t.disabled=true;if(await slotNeeded(t.dataset.order)){t.disabled=false;return}await lossadGo(t.dataset.order,null);return}
+    t.disabled=true;await record(t.dataset.act,t.dataset.order);toast((NAMES[t.dataset.act]||"Sparat")+" "+hhmm(new Date().toISOString())+".");return}
   if(t.dataset.dayopen){S.newForm={day:true,date:iso(new Date(Date.now()+864e5)),from:"",to:"",load:"full",antal:1,note:""};render();return}
   if(t.dataset.newopen){S.newForm={from:"",to:"",load:"full",antal:1,note:""};render();return}
   if(t.dataset.nfcancel){S.newForm=null;render();return}
