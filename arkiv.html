@@ -203,6 +203,54 @@ html.out,html.out body{background:var(--surface)}
 .bar i{display:block;height:100%;background:var(--accent)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:12px 18px;border-radius:5px;font-size:15px;z-index:30;max-width:calc(100% - 32px)}
 [hidden]{display:none!important}
+
+/* Milrapport – samma uppbyggnad som i Arnes milrapport */
+.mr{display:flex;flex-direction:column;gap:16px}
+.mr .mr-top{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;justify-content:space-between}
+.mr .mr-title{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.mr h1{font-family:var(--f-display);font-size:30px;line-height:1.1;margin:0;font-weight:700}
+.mr-plate{display:inline-flex;align-items:stretch;border:2px solid #222;border-radius:5px;overflow:hidden;background:#fff;color:#111;font-family:var(--f-display);font-weight:700;font-size:24px;line-height:1;height:38px}
+.mr-plate .eu{background:#003399;color:#fff;font-size:11px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:3px 5px;gap:2px}
+.mr-plate .eu i{font-style:normal;font-size:8px;color:#ffd200;letter-spacing:-1px}
+.mr-plate .txt{padding:6px 10px 0;letter-spacing:.08em}
+.mr-tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto}
+.mr-tab{background:none;border:0;padding:10px 14px;font-family:var(--f-display);font-size:17px;font-weight:600;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-1px;white-space:nowrap;cursor:pointer}
+.mr-tab[aria-current]{color:var(--fg);border-bottom-color:var(--blue)}
+.mr-stats{display:flex;flex-wrap:wrap;gap:8px 30px;padding:2px}
+.mr-stat{display:flex;flex-direction:column}
+.mr-stat .k{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.mr-stat .v{font-family:var(--f-display);font-size:26px;font-weight:600;font-variant-numeric:tabular-nums}
+.mr-months{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.mr-mcard{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.mr-mcard.off{opacity:.65}
+.mr-mcard h3{font-family:var(--f-display);font-size:19px;margin:0;display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-weight:700}
+.mr-mcard h3 small{font-family:var(--f-body);font-size:12px;color:var(--muted);font-weight:400}
+.mr-mcard .big{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.mr-mcard .big div{display:flex;flex-direction:column}
+.mr-mcard .big b{font-family:var(--f-display);font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}
+.mr-mcard .big span,.mr-mcard .sub span{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.mr-mcard .sub{border-top:1px solid var(--line);padding-top:8px;display:flex;flex-direction:column;gap:2px;font-size:13.5px}
+.mr-card{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.mr-head{display:flex;align-items:baseline;gap:6px 14px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--sunk);flex-wrap:wrap}
+.mr-head h3{font-family:var(--f-display);font-size:18px;margin:0;font-weight:700}
+.mr-head .num{font-variant-numeric:tabular-nums;font-weight:600}
+details.mr-card>summary{list-style:none;cursor:pointer}
+details.mr-card>summary::-webkit-details-marker{display:none}
+details.mr-card[open]>summary{border-bottom:1px solid var(--line)}
+.mr-route{border-top:1px solid var(--line);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.mr-routehead{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:14px}
+.mr-routehead b{font-family:var(--f-display);font-size:16px}
+.mr-table{width:100%;border-collapse:collapse;font-size:14px}
+.mr-table th{text-align:left;font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:8px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+.mr-table td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+.mr-table tr:last-child td{border-bottom:0}
+.mr-table .r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mr-table tfoot td{font-weight:700;border-top:2px solid var(--line)}
+.mr-pill{display:inline-block;font-size:12px;font-weight:600;padding:1px 8px;border-radius:999px;white-space:nowrap}
+.mr-ok{background:var(--full-bg);color:var(--full)}.mr-warn{background:var(--warn-bg);color:var(--warn)}.mr-info{background:var(--blue-soft);color:var(--blue)}.mr-mute{background:var(--sunk);color:var(--muted)}.mr-bad{background:#f9e2e0;color:#b3372f}
+.mr-note{font-size:13.5px;padding:9px 12px;border-radius:7px;background:var(--blue-soft);color:var(--fg)}
+.mr-chip{font-size:12.5px;padding:2px 9px;border-radius:999px;background:var(--sunk);color:var(--fg);border:1px solid var(--line)}
+.mr-scroll{overflow-x:auto}
 </style>
 </head>
 <body>
@@ -2130,8 +2178,8 @@ function milFkHtml(){
   const per={};main.forEach(r=>{const k=r.ort||"Okänd ort",o=per[k]||(per[k]={L:0,R:0,d:{}});if(r.typ==="leverans")o.L++;else if(r.typ==="retur_tom")o.R++;const dd=o.d[r.datum]||(o.d[r.datum]={L:0,R:0});if(r.typ==="leverans")dd.L++;else if(r.typ==="retur_tom")dd.R++});
   let rows=Object.keys(per).map(k=>{const o=per[k];let by=0,bar=0;Object.keys(o.d).forEach(d=>{const v=o.d[d],b=Math.min(v.L,v.R);by+=b;bar+=(v.L-b)+(v.R-b)});return {k,L:o.L,R:o.R,st:Object.keys(o.d).length,by,bar}}).sort((a,b)=>(b.L+b.R)-(a.L+a.R));
   const T=rows.reduce((a,r)=>({L:a.L+r.L,R:a.R+r.R,st:a.st+r.st,by:a.by+r.by,bar:a.bar+r.bar}),{L:0,R:0,st:0,by:0,bar:0});
-  let h='<div class="card" style="display:flex;flex-direction:column;gap:10px;margin-top:12px"><h3 style="font-size:19px">Per ställe (fraktsedlar)</h3><p class="muted" style="margin:0;font-size:13.5px">Ett stopp = ett besök en viss dag. Byte = full lämnad och tom hämtad vid samma stopp.</p>'+
-    tbl(["Ort","Stopp","Leveranser (14 m³)","Returer (0 m³)","Byten","Utan par"],rows.map(r=>[r.k,String(r.st),String(r.L),String(r.R),String(r.by),String(r.bar)]),["Totalt",String(T.st),String(T.L),String(T.R),String(T.by),String(T.bar)])+'</div>';
+  let h='<div class="mr-card" style="margin-top:4px"><div class="mr-head"><h3>Per ställe</h3><span class="muted">Ett stopp = ett besök en viss dag. Byte = full lämnad och tom hämtad vid samma stopp.</span></div>'+
+    mrTable(["Ort","Stopp","Leveranser (14 m³)","Returer (0 m³)","Byten","Utan par"],rows.map(r=>[esc(r.k),String(r.st),String(r.L),String(r.R),String(r.by),r.bar?mrPill(String(r.bar),"warn"):"0"]),["Totalt",String(T.st),String(T.L),String(T.R),String(T.by),String(T.bar)])+'</div>';
   const byD={};main.forEach(r=>(byD[r.datum]=byD[r.datum]||[]).push(r));
   h+='<details class="card" style="margin-top:12px"><summary style="cursor:pointer"><b style="font-size:18px">Fraktsedlar per datum</b> <span class="muted">'+main.length+' st</span></summary>'+Object.keys(byD).sort().map(d=>{const L=byD[d].sort((a,b)=>String(a.ort).localeCompare(String(b.ort),"sv")||String(a.typ).localeCompare(String(b.typ))),g=L.filter(x=>x.status==="granska"||x.status==="ej_tolkad").length;
     return '<div style="margin-top:12px"><b>'+esc(dayLabel(d))+'</b> <span class="muted">'+L.length+' fraktsedlar</span>'+(g?' <span class="pill p-warn">'+g+' att granska</span>':'')+tbl(["Ref","Från","Till","Typ","Km","Status"],L.map(r=>[r.nr||"–",milShort(r.avs),milShort(r.mott),MTYP[r.typ]?MTYP[r.typ][0]:"–",r.km!=null?n1(r.km):"–",MSTAT[r.status]||r.status||"–"]))+'</div>'}).join("")+'</details>';
@@ -2139,38 +2187,50 @@ function milFkHtml(){
   if(ark.length)h+='<details class="card" style="margin-top:12px"><summary style="cursor:pointer"><b>Arkiv</b> <span class="muted">'+ark.length+' deklarationer som inte räknas: annan bil, dubbletter, utanför perioden eller redan inräknade som GPS-händelser</span></summary>'+tbl(["Ref","Från","Till","Typ","Anteckning"],ark.map(r=>[r.nr||"–",milShort(r.avs),milShort(r.mott),MTYP[r.typ]?MTYP[r.typ][0]:"–",r.gps||r.anm||""]))+'</details>';
   return h}
 function milVikt(s){if(s.vf==null&&s.ve==null)return s.vikt||"–";const t=x=>x==null?"?":(x/1000).toFixed(1).replace(".",",");return t(s.vf)+" → "+t(s.ve)+" t"+(s.vikt?" · "+s.vikt:"")}
+const mrPill=(t,k)=>'<span class="mr-pill mr-'+k+'">'+esc(t)+'</span>';
+function mrTable(head,rows,foot){const r=i=>i>0?' class="r"':'';return '<div class="mr-scroll"><table class="mr-table"><thead><tr>'+head.map((h,i)=>'<th'+(i>0&&!/^(Tid|Plats|Ref|Typ|Från|Till|Status|Fraktsedel|Vikt|Ort|Station)/.test(h)?' class="r"':'')+'>'+esc(h)+'</th>').join("")+'</tr></thead><tbody>'+rows.map(x=>'<tr>'+x.map((c,i)=>'<td'+(head[i]&&i>0&&!/^(Tid|Plats|Ref|Typ|Från|Till|Status|Fraktsedel|Vikt|Ort|Station)/.test(head[i])?' class="r"':'')+'>'+c+'</td>').join("")+'</tr>').join("")+'</tbody>'+(foot?'<tfoot><tr>'+foot.map((c,i)=>'<td'+(head[i]&&i>0&&!/^(Tid|Plats|Ref|Typ|Från|Till|Status|Fraktsedel|Vikt|Ort|Station)/.test(head[i])?' class="r"':'')+'>'+c+'</td>').join("")+'</tr></tfoot>':'')+'</table></div>'}
+function mrTyp(t){const m={byte:["Byte","ok"],leverans:["Leverans 14 m³","info"],retur_tom:["Retur 0 m³","warn"]};const x=m[t];return x?mrPill(x[0],x[1]):(t?mrPill(t,"mute"):"–")}
+function mrVikt(s){if(s.vf==null&&s.ve==null)return s.vikt?mrPill(s.vikt,"mute"):'<span class="muted">–</span>';const t=x=>x==null?"?":(x/1000).toFixed(1).replace(".",",");
+  const k=s.vikt==="Last av"?"ok":s.vikt==="Last på"?"info":s.vikt==="Delvis"?"warn":"mute";
+  return '<span style="white-space:nowrap;font-variant-numeric:tabular-nums">'+t(s.vf)+' → '+t(s.ve)+' t</span> '+(s.vikt?mrPill(s.vikt==="Last av"?"Last av":s.vikt==="Last på"?"Last på":s.vikt,k):"")}
 function renderMil(){
   const H=(S.bundle&&S.bundle.hist)||{dagar:[],bilar:{}},B=H.bilar||{};
-  const n1=x=>(Math.round(x*10)/10).toLocaleString("sv-SE"),f1=v=>v==null||v===""?"–":n1(v);
+  const n1=x=>(Math.round(x*10)/10).toLocaleString("sv-SE"),f1=v=>v==null||v===""?"–":n1(v),n0=x=>Math.round(x).toLocaleString("sv-SE");
   const MN=["januari","februari","mars","april","maj","juni","juli","augusti","september","oktober","november","december"];
-  const chip=(k,l,a)=>'<button class="chip" data-milcar="'+k+'"'+(S.milCar===k?' aria-current="date"':'')+'>'+l+'</button>';
+  const tab=S.milTab||"dagar";
   const all=(H.dagar||[]).filter(d=>d.car===S.milCar&&d.rutter&&d.rutter.length&&!isTest(d.datum));
   const mons=[...new Set(all.map(d=>d.datum.slice(0,7)))].sort();
-  let h='<div class="pagehead"><h2>Milrapport</h2><p class="muted">GPS-rutter, km mellan stopp och kontroll mot deklarationerna. '+esc((B[S.milCar]||{}).reg||"")+" · "+esc((B[S.milCar]||{}).fuel||"")+'</p></div>';
-  h+='<div class="chips">'+CARS.map(c=>chip(c[0],c[1])).join("")+'</div>';
-  if(!all.length)return h+'<div class="card muted">Ingen GPS-data inläst för den här bilen ännu.'+(S.milCar==="bil3"?" Bil 3 följs via färdskrivare och mätare, inte GPS.":"")+'</div>';
-  h+='<div class="chips"><button class="chip" data-milmon=""'+(S.milMon===""?' aria-current="date"':'')+'>Alla</button>'+mons.map(m=>'<button class="chip" data-milmon="'+m+'"'+(S.milMon===m?' aria-current="date"':'')+'>'+MN[+m.slice(5)-1]+'</button>').join("")+'</div>';
+  const reg=((B[S.milCar]||{}).reg||"").toUpperCase();
+  let h='<div class="mr"><div class="mr-top"><div class="mr-title">'+(reg?'<span class="mr-plate"><span class="eu"><i>★★★</i>S</span><span class="txt">'+esc(reg.slice(0,3)+" "+reg.slice(3))+'</span></span>':'')+'<div><h1>Milrapport</h1><div class="muted" style="font-size:14px">Godsdeklarationer mot GPS-rutter, km per stopp och avvikelser'+((B[S.milCar]||{}).fuel?' · '+esc(B[S.milCar].fuel):'')+'</div></div></div>'+
+    '<div class="chips">'+CARS.map(c=>'<button class="chip" data-milcar="'+c[0]+'"'+(S.milCar===c[0]?' aria-current="date"':'')+'>'+esc(c[1])+'</button>').join("")+'</div></div>';
+  if(!all.length)return h+'<div class="card muted">Ingen GPS-data inläst för den här bilen ännu.'+(S.milCar==="bil3"?" Bil 3 följs via färdskrivare och mätare, inte GPS.":"")+'</div></div>';
   /* månadskort */
-  h+='<div class="tiles">'+mons.map(m=>{const D=all.filter(d=>d.datum.slice(0,7)===m&&!/^Väntar/.test(d.status||""));
-    if(!D.length)return '<div class="tile"><span class="k">'+MN[+m.slice(5)-1]+'</span><span class="v">–</span><small>Väntar på deklarationer</small></div>';
+  h+='<div class="mr-months">'+mons.map(m=>{const D=all.filter(d=>d.datum.slice(0,7)===m&&!/^Väntar/.test(d.status||"")),vant=all.filter(d=>d.datum.slice(0,7)===m&&/^Väntar/.test(d.status||"")).length,nm=MN[+m.slice(5)-1].replace(/^./,c=>c.toUpperCase());
+    if(!D.length)return '<div class="mr-mcard off"><h3>'+nm+'<small>Väntar på deklarationer</small></h3><div class="big"><div><b>–</b><span>Stopp</span></div><div><b>–</b><span>Km</span></div><div><b>–</b><span>Km/stopp</span></div></div></div>';
     let st=0,km=0,sSt=0,sKm=0,sR=0;D.forEach(d=>{km+=d.km||0;st+=milCount(d);d.rutter.forEach(r=>{const k=r.stopp.reduce((a,s)=>a+(s.fs?String(s.fs).split(",").filter(x=>x.trim()).length:0),0);if(r.slap&&(r.kund||0)>=2){sR++;sSt+=k;sKm+=r.km||0}})});
-    return '<div class="tile"><span class="k">'+MN[+m.slice(5)-1]+' · '+D.length+' dagar</span><span class="v">'+st+' <small>stopp</small></span><small>'+Math.round(km).toLocaleString("sv-SE")+' km · '+(st?n1(km/st):"–")+' km/stopp</small><small>Bil: '+(st-sSt)+' stopp, '+(st-sSt?n1((km-sKm)/(st-sSt)):"–")+' km/stopp</small><small>Bil+släp: '+(sR?sR+' runda'+(sR>1?"or":"")+", "+sSt+" stopp, "+n1(sKm/sSt)+" km/stopp":"inga")+'</small></div>'}).join("")+'</div>';
-  /* per station: enkelkundsrutter */
-  const per={};all.filter(d=>!S.milMon||d.datum.slice(0,7)===S.milMon).forEach(d=>d.rutter.forEach(r=>{const c=r.stopp.filter(s=>s.typ==="byte");if(c.length===1&&!r.slap){const nm=GPSM.parsePlats(c[0].plats).namn;(per[nm]||(per[nm]=[])).push(r.km)}}));
-  const rows=Object.keys(per).sort((a,b)=>per[b].length-per[a].length).map(k=>{const v=per[k];return [k,String(v.length),n1(v.reduce((a,b)=>a+b,0)/v.length),n1(Math.min(...v))+"–"+n1(Math.max(...v))]});
-  if(rows.length)h+='<div class="card" style="display:flex;flex-direction:column;gap:10px"><h3 style="font-size:19px">Per station (enkelrutter utan släp)</h3>'+tbl(["Station","Besök","Snitt km/rutt","Min–max"],rows)+'<p class="muted" style="margin:0;font-size:13.5px">Används som jämförelsevärde: en rutt som avviker mycket från snittet är värd att kontrollera.</p></div>';
-  h+=milFkHtml();
-  h+='<div><button class="btn" data-milcsv="1">Ladda ner km och stopp (CSV, för energideklarationen)</button></div>';
-  /* dagkort */
+    return '<div class="mr-mcard"><h3>'+nm+'<small>'+D.length+' körda dagar'+(vant?' · +'+vant+' väntar':'')+'</small></h3><div class="big"><div><b>'+st+'</b><span>Stopp</span></div><div><b>'+n0(km)+'</b><span>Km</span></div><div><b>'+(st?n1(km/st):"–")+'</b><span>Km/stopp</span></div></div>'+
+      '<div class="sub"><span>Enbart bil</span><div>'+(st-sSt)+' stopp · '+n0(km-sKm)+' km · '+(st-sSt?n1((km-sKm)/(st-sSt)):"–")+' km/stopp</div></div><div class="sub"><span>Bil + släp</span><div>'+(sR?sR+' runda'+(sR>1?"or":"")+' · '+sSt+' stopp · '+n0(sKm)+' km · '+n1(sKm/sSt)+' km/stopp':'Inga släprundor')+'</div></div></div>'}).join("")+'</div>';
+  /* nyckeltal */
+  {const D=all.filter(d=>!/^Väntar/.test(d.status||"")),km=D.reduce((a,d)=>a+(d.km||0),0),st=D.reduce((a,d)=>a+milCount(d),0),fl=D.reduce((a,d)=>a+milFlags(d).length,0),dates=all.map(d=>d.datum).sort();
+    h+='<div class="mr-stats">'+[["Körda dagar",D.length],["Period",dates[0].slice(8)+"/"+(+dates[0].slice(5,7))+" – "+dates[dates.length-1].slice(8)+"/"+(+dates[dates.length-1].slice(5,7))],["Stopp",st],["Km enligt GPS",n0(km)],["Att granska",fl]].map(x=>'<div class="mr-stat"><span class="k">'+x[0]+'</span><span class="v">'+esc(x[1])+'</span></div>').join("")+'</div>'}
+  /* flikar */
+  h+='<div class="mr-tabs"><button class="mr-tab" data-miltab="dagar"'+(tab==="dagar"?' aria-current="page"':'')+'>Dagar &amp; km</button>'+(milFk().length?'<button class="mr-tab" data-miltab="fs"'+(tab==="fs"?' aria-current="page"':'')+'>Fraktsedlar</button>':'')+'<button class="mr-tab" data-miltab="per"'+(tab==="per"?' aria-current="page"':'')+'>Per station</button></div>';
+  if(tab==="fs"&&milFk().length)return h+milFkHtml()+'</div>';
+  if(tab==="per"){
+    const per={};all.forEach(d=>d.rutter.forEach(r=>{const c=r.stopp.filter(s=>s.typ==="byte");if(c.length===1&&!r.slap){const nm=GPSM.parsePlats(c[0].plats).namn;(per[nm]||(per[nm]=[])).push(r.km)}}));
+    const rows=Object.keys(per).sort((a,b)=>per[b].length-per[a].length).map(k=>{const v=per[k];return [esc(k),String(v.length),n1(v.reduce((a,b)=>a+b,0)/v.length),n1(Math.min(...v))+"–"+n1(Math.max(...v))]});
+    return h+'<div class="mr-card"><div class="mr-head"><h3>Per station</h3><span class="muted">Enkelrutter utan släp. En rutt som avviker mycket från snittet är värd att kontrollera.</span></div>'+(rows.length?mrTable(["Station","Besök","Snitt km/rutt","Min–max"],rows):'<p class="muted" style="padding:12px 14px;margin:0">Inga enkelrutter än.</p>')+'</div></div>'}
+  /* dagar */
+  h+='<div class="chips"><button class="chip" data-milmon=""'+(S.milMon===""?' aria-current="date"':'')+'>Alla</button>'+mons.map(m=>'<button class="chip" data-milmon="'+m+'"'+(S.milMon===m?' aria-current="date"':'')+'>'+MN[+m.slice(5)-1]+'</button>').join("")+'<span style="flex:1"></span><button class="btn small" data-milcsv="1">Ladda ner km och stopp (CSV)</button></div>';
+  h+='<div class="mr-note">Vikt = bilens axelvikter i Mapon vid ankomst och avfärd. Last av = fullt flak av bilen, Last på = fyllning eller fullt flak på. Byten på släpet syns inte i bilens vikt.</div>';
   milDays().forEach(d=>{const fl=milFlags(d),wait=/^Väntar/.test(d.status||"");
-    h+='<details class="card mil-day"><summary style="cursor:pointer;display:flex;gap:10px;flex-wrap:wrap;align-items:baseline"><b style="font-size:18px">'+esc(dayLabel(d.datum))+'</b><span class="muted">'+f1(d.km)+' km · '+d.rutter.length+' rutter · '+milCount(d)+' stopp</span>'+(d.forare?'<span class="muted">'+esc(d.forare.split(" ")[0])+'</span>':'')+
-      (wait?'<span class="chip">Väntar på deklarationer</span>':fl.length?'<span class="chip" style="border-color:var(--warn,#b26b00)">'+fl.length+' att granska</span>':'<span class="chip">Stämmer</span>')+'</summary>'+
-      (d.kommentar?'<p class="muted" style="margin:8px 0">'+esc(d.kommentar)+'</p>':'')+
-      (fl.length?'<ul style="margin:6px 0 10px;padding-left:20px">'+fl.map(x=>'<li>'+esc(x[1])+'</li>').join("")+'</ul>':'')+
-      d.rutter.map((r,i)=>'<div style="margin-top:10px"><b>Rutt '+(i+1)+(r.bas?" från "+esc(r.bas):"")+'</b> <span class="muted">'+(r.slap?"Bil + släp":"Bil")+' · '+f1(r.km)+' km · '+esc(r.start||"")+(r.slut?"–"+esc(r.slut):"")+'</span>'+
-        tbl(["Tid","Plats","Fraktsedel","Typ","Km från förra","Vikt","Stod"],r.stopp.map(s=>[s.tid||"–",s.plats||"–",s.fs||"–",s.typ||"–",f1(s.km),milVikt(s),s.min!=null?s.min+" min":"–"]))+'</div>').join("")+'</details>'});
-  return h;
-}
+    h+='<details class="mr-card"><summary class="mr-head"><h3>'+esc(dayLabel(d.datum))+'</h3><span class="num">'+f1(d.km)+' km</span><span class="muted">'+d.rutter.length+' rutter · '+milCount(d)+' stopp</span>'+(d.forare?'<span class="mr-chip">Förare: '+esc(d.forare.split(" ")[0])+'</span>':'')+
+      (wait?mrPill("Väntar på deklarationer","mute"):fl.length?mrPill(fl.length+" att granska","warn"):mrPill("Stämmer","ok"))+'</summary>'+
+      (d.kommentar?'<div class="muted" style="padding:10px 14px">'+esc(d.kommentar)+'</div>':'')+
+      (fl.length?'<ul style="margin:8px 0 4px;padding-left:34px">'+fl.map(x=>'<li>'+esc(x[1])+'</li>').join("")+'</ul>':'')+
+      d.rutter.map((r,i)=>'<div class="mr-route"><div class="mr-routehead"><b>Rutt '+(i+1)+(r.bas?' från '+esc(r.bas):'')+'</b>'+(r.slap?mrPill("Bil + släp","info"):mrPill("Bil","mute"))+'<span class="num">'+f1(r.km)+' km</span><span class="muted">'+esc(r.start||"")+(r.slut?"–"+esc(r.slut):"")+'</span></div>'+
+        mrTable(["Tid","Plats","Fraktsedel","Typ","Vikt","Km från förra","Stod"],r.stopp.map(s=>[esc(s.tid||"–"),esc(s.plats||"–")+(s.avv?' '+mrPill(s.avv,"warn"):''),esc(s.fs||"–"),mrTyp(s.typ),mrVikt(s),f1(s.km),s.min!=null?s.min+" min":"–"]))+'</div>').join("")+'</details>'});
+  return h+'</div>'}
 
 /* ---- Veckovy: alla bilar, sju dagar, ledighet ---- */
 S.vecW=0;
@@ -2204,7 +2264,7 @@ function renderSum(){
    sec("Körningar med släp (appen)",O.trl.length?tbl(["Dag","Bil","Släp","Körn."],O.trl):'<p class="muted" style="margin:0">Inga.</p>')+
    sec("Rapporterat i appen per dag",tbl(["Datum","Bil","Förare","Släp","Körn.","Lossade","kg"],O.perDag.sort((a,b)=>a[0]<b[0]?1:-1))):"");
 }
-function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v90</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v90 – skicka den här texten till mig.</div>'}}
+function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v91</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v91 – skicka den här texten till mig.</div>'}}
 function renderAdmin(){
   const ds=days(),B=S.bundle;let h='<div class="pagehead"><h2>Översikt</h2><p class="muted">Dagens körningar, status från förarna och aviseringar.</p></div>';
   {const D=S.date||today(),cs=B.cars.filter(c=>c.days[D]);let nL=0,nU=0,nG=0;cs.forEach(c=>{const st=statesFor(c.dir,D);if(st.get("dag|godkand"))nG++;allLegs(c.dir,D,c.days[D].legs.map(l=>Object.assign({},l,{from:{name:l.from},to:{name:l.to}}))).filter(l=>!l.deleted).forEach(l=>{nL++;if(st.get(l.order+"|lossad"))nU++})});
@@ -2297,6 +2357,7 @@ document.addEventListener("click",async e=>{
   if(t.dataset.vecw!==undefined){S.vecW=t.dataset.vecw==="0"?0:S.vecW+ +t.dataset.vecw;render();return}
   if(t.dataset.vec){const [d,c]=t.dataset.vec.split("|");S.view="plan";S.pl.date=d;S.pl.car=c;render();return}
   if(t.dataset.milcar){S.milCar=t.dataset.milcar;S.milMon="";render();return}
+  if(t.dataset.miltab){S.milTab=t.dataset.miltab;render();return}
   if(t.dataset.milmon!==undefined){S.milMon=t.dataset.milmon;render();return}
   if(t.dataset.sumtab){S.sumTab=t.dataset.sumtab;render();window.scrollTo(0,0);return}
   if(t.dataset.range!==undefined){const [a,b]=t.dataset.range.split("|");S.from=a;S.to=b;render();return}
