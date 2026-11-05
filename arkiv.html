@@ -905,7 +905,7 @@ async function dkSync(){
   finally{S.dk.busy=false}}
 function dkClose(){const o=document.getElementById("dkview");if(o){o.querySelectorAll("[data-u]").forEach(x=>URL.revokeObjectURL(x.dataset.u));o.remove()}}
 async function dkOpen(){
-  const r=route();if(!r)return;dkClose();const dir=S.bundle.dir,legs=allLegs(dir,r.date,r.legs).filter(x=>!x.deleted);
+  const r=route();if(!r)return;dkClose();const dir=S.bundle.dir,legs=allLegs(dir,r.date,r.legs).filter(x=>!x.deleted&&!(kordGet(dir,r.date,x.order)===false&&lockGet(dir,r.date,x.order)));
   const o=document.createElement("div");o.id="dkview";o.style.cssText="position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column;padding:12px;gap:10px;overflow:auto";
   o.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:19px">Godsdeklarationer · '+esc(dayLabel(r.date))+'</b><button class="btn" data-dk="close">Stäng</button></div><div class="muted" style="font-size:14px">Sparade på den här enheten. Fungerar utan internet.</div><div id="dkl" style="display:flex;flex-direction:column;gap:8px"></div><div id="dkf" style="flex:1;min-height:0;display:none;flex-direction:column;gap:6px"></div>';
   document.body.appendChild(o);const L=o.querySelector("#dkl");
@@ -970,7 +970,7 @@ async function kordSet(date,order,ok){const dir=S.bundle.dir;if(lockGet(dir,date
 async function dkArch(){
   dkClose();const dir=S.bundle.dir,idx=dkIdx(),keys=Object.keys(idx).sort((a,b)=>idx[b].date.localeCompare(idx[a].date)||idx[b].order.localeCompare(idx[a].order));
   const o=document.createElement("div");o.id="dkview";o.style.cssText="position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column;padding:12px;gap:10px;overflow:auto";
-  const ok=k=>kordGet(dir,idx[k].date,idx[k].order),good=keys.filter(k=>ok(k)!==false),bad=keys.filter(k=>ok(k)===false);
+  const hid=k=>ok(k)===false&&!!lockGet(dir,idx[k].date,idx[k].order),ok=k=>kordGet(dir,idx[k].date,idx[k].order),good=keys.filter(k=>ok(k)!==false),bad=keys.filter(k=>ok(k)===false&&!hid(k));
   const kg=good.reduce((a,k)=>a+(idx[k].kg||0),0),days=new Set(good.map(k=>idx[k].date)).size;
   const row=(k)=>{const x=idx[k],v=ok(k),lk=lockGet(dir,x.date,x.order);
     return '<div class="card dkr" data-q="'+esc((x.date+" "+x.from+" "+x.to+" "+x.order).toLowerCase())+'" style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0;padding:10px 12px"><button data-dk="ashow" data-k="'+esc(k)+'" style="all:unset;cursor:pointer;flex:1;min-width:0"><b>'+esc(x.from)+' → '+esc(x.to)+'</b><br><span class="muted" style="font-size:13.5px">'+esc(x.order)+(x.mangd?' · '+esc(x.mangd):'')+' · Visa ›</span></button>'+
@@ -997,20 +997,21 @@ async function arLoad(){
   try{const reds=S.ar.rows.filter(x=>x.ok===false&&!(S.ej.d[x.dir+"|"+x.date+"|"+x.leg.order]));
     if(reds.length)await ejKordAdd(reds.map(x=>({key:x.dir+"|"+x.date+"|"+x.leg.order,dir:x.dir,date:x.date,order:x.leg.order,ok:false,car:x.car,from:x.leg.from.name,to:x.leg.to.name,load:x.leg.load,mangd:x.leg.mangd})))}catch(e){}}
 function renderArk(){
-  const A=S.ar,cars=S.bundle.planCars||[],rows=(A.rows||[]).slice().reverse(),vis0=A.car==="all"?rows:rows.filter(x=>x.dir===(cars.find(c=>c.id===A.car)||{}).dir),vis=vis0.filter(x=>x.ok!==false),notRun=vis0.filter(x=>x.ok===false);
+  const A=S.ar,cars=S.bundle.planCars||[],rows=(A.rows||[]).slice().reverse(),vis0=A.car==="all"?rows:rows.filter(x=>x.dir===(cars.find(c=>c.id===A.car)||{}).dir),vis=vis0.filter(x=>x.ok!==false),notRun0=vis0.filter(x=>x.ok===false),notRun=notRun0.filter(x=>!lockGet(x.dir,x.date,x.leg.order)),removed=notRun0.filter(x=>lockGet(x.dir,x.date,x.leg.order));
   let h='<div class="pagehead"><h2>Arkiv</h2><p class="muted">Alla körda deklarationer för alla bilar. Samma deklarationer ligger sparade i varje förares app.</p></div>';
   if(TEST_DATES.length)h+='<div class="notice warn">Testdagar ('+TEST_DATES.join(", ")+') sparas inte i arkivet och räknas inte med i Sammanställningen eller exporten.</div>';
   h+='<div class="card" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between"><div><b>Säkerhetskopia</b><div class="muted" style="font-size:14px">Alla planer, ledighet, hämtningar, pauser, felrapporter, anteckningar och historik som en JSON-fil. Sparas på den här datorn.</div></div><button class="btn" data-backup="1">Ladda ner säkerhetskopia</button></div>';
   h+='<div class="tiles">'+cars.map(c=>{const r=rows.filter(x=>x.dir===c.dir&&x.ok!==false),kg=r.reduce((a,x)=>a+(x.leg.kg||0),0),dd=new Set(r.map(x=>x.date)).size;return '<div class="tile"><span class="k">'+esc(c.name)+(c.driver?' · '+esc(c.driver.split(" ")[0]):'')+'</span><span class="v">'+r.length+' <small>transporter</small></span><span class="muted" style="font-size:13px">'+dd+' dagar'+(kg?' · '+sp(kg)+' kg':'')+'</span></div>'}).join("")+'</div>';
-  h+='<div class="card" style="margin-top:14px"><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;align-items:center"><div class="chips"><button class="chip" data-ar="car" data-c="all"'+(A.car==="all"?' aria-current="date"':'')+'>Alla bilar</button>'+cars.map(c=>'<button class="chip" data-ar="car" data-c="'+c.id+'"'+(A.car===c.id?' aria-current="date"':'')+'>'+esc(c.name)+'</button>').join("")+'</div><span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small go" data-ar="lockall">Lås alla kontrollerade ('+vis0.filter(x=>!lockGet(x.dir,x.date,x.leg.order)).length+')</button><button class="btn small" data-ar="csv">Exportera data (CSV)</button></span></div>'+
+  h+='<div class="card" style="margin-top:14px"><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;align-items:center"><div class="chips"><button class="chip" data-ar="car" data-c="all"'+(A.car==="all"?' aria-current="date"':'')+'>Alla bilar</button>'+cars.map(c=>'<button class="chip" data-ar="car" data-c="'+c.id+'"'+(A.car===c.id?' aria-current="date"':'')+'>'+esc(c.name)+'</button>').join("")+'</div><span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small go" data-ar="lockall">Lås alla kontrollerade ('+vis0.filter(x=>x.ok!==false&&!lockGet(x.dir,x.date,x.leg.order)).length+')</button><button class="btn small" data-ar="csv">Exportera data (CSV)</button></span></div>'+
     (A.busy?'<p class="muted">Hämtar…</p>':'')+
     '<div style="overflow:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr class="muted" style="text-align:left"><th>Datum</th><th>Bil</th><th>Order</th><th>Från → Till</th><th>Typ</th><th>Mängd</th><th>kg</th><th>Körd</th><th>Låst</th><th></th></tr></thead><tbody>'+
     (vis.length?vis.map(x=>'<tr style="border-top:1px solid var(--line)"><td>'+esc(x.date)+'</td><td>'+esc(x.car)+'</td><td>'+esc(x.leg.order)+'</td><td>'+esc(x.leg.from.name)+' → '+esc(x.leg.to.name)+'</td><td><span class="pill '+(x.leg.load==="tom"?'p-tom':'p-full')+'">'+(x.leg.load==="tom"?'Retur':'Utkörning')+'</span></td><td>'+esc(x.leg.mangd||"")+'</td><td style="font-weight:700;color:'+(x.leg.load==="tom"?'var(--empty)':'var(--full)')+'">'+(x.leg.kg?sp(x.leg.kg):"")+'</td><td>'+(x.ok===true?'<b style="color:#2e9e4f">✓</b>':x.ok===false?'<b style="color:#d03a3a">✗</b>':'<span class="muted">–</span>')+'</td><td>'+(lockGet(x.dir,x.date,x.leg.order)?'<button class="btn link" data-ar="unlock" data-i="'+rows.indexOf(x)+'" title="Lås upp">🔒 Låst</button>':'<button class="btn link" data-ar="lock" data-i="'+rows.indexOf(x)+'">Lås</button>')+'</td><td><button class="btn link" data-ar="open" data-i="'+rows.indexOf(x)+'">Öppna</button></td></tr>').join(""):'<tr><td colspan="10" class="muted" style="padding:10px 0">Inga körda transporter än.</td></tr>')+'</tbody></table></div></div>';
-  if(notRun.length)h+='<div class="card" style="margin-top:14px;border-left:4px solid #d03a3a"><b>Ej körda – förarna har markerat med ✗ (sparas separat, räknas inte i summorna)</b><div style="overflow:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse;font-size:14px"><tbody>'+notRun.map(x=>'<tr style="border-top:1px solid var(--line)"><td>'+esc(x.date)+'</td><td>'+esc(x.car)+'</td><td>'+esc(x.leg.order)+'</td><td>'+esc(x.leg.from.name)+' → '+esc(x.leg.to.name)+'</td><td>'+(lockGet(x.dir,x.date,x.leg.order)?'<button class="btn link" data-ar="unlock" data-i="'+rows.indexOf(x)+'">🔒 Låst</button>':'<button class="btn link" data-ar="lock" data-i="'+rows.indexOf(x)+'">Lås</button>')+'</td><td><button class="btn link" data-ar="open" data-i="'+rows.indexOf(x)+'">Öppna</button></td></tr>').join("")+'</tbody></table></div></div>';
+  if(notRun.length)h+='<div class="card" style="margin-top:14px;border-left:4px solid #d03a3a"><b>Ej körda – förarna har markerat med ✗ (sparas separat, räknas inte i summorna). "Lås & dölj" tar bort dem från surfplattorna.</b><div style="overflow:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse;font-size:14px"><tbody>'+notRun.map(x=>'<tr style="border-top:1px solid var(--line)"><td>'+esc(x.date)+'</td><td>'+esc(x.car)+'</td><td>'+esc(x.leg.order)+'</td><td>'+esc(x.leg.from.name)+' → '+esc(x.leg.to.name)+'</td><td>'+(lockGet(x.dir,x.date,x.leg.order)?'<button class="btn link" data-ar="unlock" data-i="'+rows.indexOf(x)+'">🔒 Låst</button>':'<button class="btn small" data-ar="lock" data-i="'+rows.indexOf(x)+'">Lås & dölj</button>')+'</td><td><button class="btn link" data-ar="open" data-i="'+rows.indexOf(x)+'">Öppna</button></td></tr>').join("")+'</tbody></table></div></div>';
+  if(removed.length)h+='<div class="card" style="margin-top:14px;border-left:4px solid var(--line)"><b>Borttaget – dolt för förarna (sparas alltid, bara du ser dem)</b><div style="overflow:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse;font-size:14px"><tbody>'+removed.map(x=>'<tr style="border-top:1px solid var(--line)"><td>'+esc(x.date)+'</td><td>'+esc(x.car)+'</td><td>'+esc(x.leg.order)+'</td><td>'+esc(x.leg.from.name)+' → '+esc(x.leg.to.name)+'</td><td><button class="btn link" data-ar="open" data-i="'+rows.indexOf(x)+'">Öppna</button></td><td><button class="btn link" data-ar="unlock" data-i="'+rows.indexOf(x)+'">Återställ till förarna</button></td></tr>').join("")+'</tbody></table></div></div>';
   {const ej=Object.keys(S.ej.d||{}).map(k=>S.ej.d[k]).sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:0);
     h+='<div class="card" style="margin-top:14px;border-left:4px solid #d03a3a"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center"><b>Ej körda – egen fil (sparas alltid, raderas aldrig)</b><button class="btn small" data-ar="ejcsv">Ladda ner filen (CSV)</button></div><p class="muted" style="font-size:14px;margin:6px 0">Allt som någon gång markerats ✗ ligger här med historik, även om det senare ändrats. "Ändrad till ✓" betyder att någon trycket grönt efteråt – kontrollera.</p>'+
       (ej.length?'<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr class="muted" style="text-align:left"><th>Datum</th><th>Bil</th><th>Order</th><th>Från → Till</th><th>Nu</th><th>Låst</th><th>Historik</th></tr></thead><tbody>'+ej.map(e=>{const cur=e.log.length?e.log[e.log.length-1].ok:false;const row=rows.find(x=>x.dir===e.dir&&x.date===e.date&&x.leg.order===e.order),nu=row?row.ok:cur;
-        return '<tr style="border-top:1px solid var(--line)"><td>'+esc(e.date)+'</td><td>'+esc(e.car)+'</td><td>'+esc(e.order)+'</td><td>'+esc(e.from)+' → '+esc(e.to)+'</td><td>'+(nu===false?'<b style="color:#d03a3a">✗ Ej körd</b>':'<b style="color:#b26b00">⚠ Ändrad till '+(nu===true?'✓':'–')+'</b>')+'</td><td>'+(lockGet(e.dir,e.date,e.order)?'<button class="btn link" data-ar="ecunlock" data-k="'+esc(e.dir+"|"+e.date+"|"+e.order)+'">🔒 Låst</button>':'<button class="btn link" data-ar="eclock" data-k="'+esc(e.dir+"|"+e.date+"|"+e.order)+'">Lås</button>')+'</td><td class="muted">'+e.log.map(l=>(l.ok?'✓':'✗')+' '+new Date(l.ts).toLocaleString("sv-SE",{dateStyle:"short",timeStyle:"short"})+' ('+esc(l.by)+')').join(' → ')+'</td></tr>'}).join("")+'</tbody></table></div>':'<p class="muted" style="margin:0">Inga ✗-markeringar än.</p>')+'</div>'}
+        return '<tr style="border-top:1px solid var(--line)"><td>'+esc(e.date)+'</td><td>'+esc(e.car)+'</td><td>'+esc(e.order)+'</td><td>'+esc(e.from)+' → '+esc(e.to)+'</td><td>'+(nu===false?'<b style="color:#d03a3a">✗ Ej körd</b>':'<b style="color:#b26b00">⚠ Ändrad till '+(nu===true?'✓':'–')+'</b>')+'</td><td>'+(lockGet(e.dir,e.date,e.order)?'<button class="btn link" data-ar="ecunlock" data-k="'+esc(e.dir+"|"+e.date+"|"+e.order)+'">🔒 Låst</button>':'<button class="btn link" data-ar="eclock" data-k="'+esc(e.dir+"|"+e.date+"|"+e.order)+'">Lås & dölj</button>')+'</td><td class="muted">'+e.log.map(l=>(l.ok?'✓':'✗')+' '+new Date(l.ts).toLocaleString("sv-SE",{dateStyle:"short",timeStyle:"short"})+' ('+esc(l.by)+')').join(' → ')+'</td></tr>'}).join("")+'</tbody></table></div>':'<p class="muted" style="margin:0">Inga ✗-markeringar än.</p>')+'</div>'}
   return h}
 document.addEventListener("click",async e=>{const t=e.target.closest("[data-ar]");if(!t||!S.bundle)return;const a=t.dataset.ar;
   if(a==="car"){S.ar.car=t.dataset.c;render();return}
@@ -1022,7 +1023,7 @@ document.addEventListener("click",async e=>{const t=e.target.closest("[data-ar]"
     try{const row=(S.ar.rows||[]).find(x=>x.dir===e2.dir&&x.date===e2.date&&x.leg.order===e2.order),cur=row?row.ok:(e2.log.length?e2.log[e2.log.length-1].ok:false);
       await admEvent(e2.dir,e2.date,e2.order,"las",{on:a==="eclock",ok:a==="eclock"?cur:null})}catch(err){toast("Kunde inte spara låsningen.")}
     S.ar.rows=akItems();render();return}
-  if(a==="lockall"){const xs=(S.ar.rows||[]).filter(x=>(S.ar.car==="all"||x.dir===(((S.bundle.planCars||[]).find(c=>c.id===S.ar.car))||{}).dir)&&!lockGet(x.dir,x.date,x.leg.order));
+  if(a==="lockall"){const xs=(S.ar.rows||[]).filter(x=>(S.ar.car==="all"||x.dir===(((S.bundle.planCars||[]).find(c=>c.id===S.ar.car))||{}).dir)&&x.ok!==false&&!lockGet(x.dir,x.date,x.leg.order));
     if(!xs.length){toast("Allt är redan låst.");return}if(S.arLockArm!==xs.length){S.arLockArm=xs.length;toast("Tryck igen för att låsa "+xs.length+" transporter. Förarna kan då inte ändra ✓/✗.");return}S.arLockArm=null;t.disabled=true;
     let n=0;try{for(const x of xs){await admEvent(x.dir,x.date,x.leg.order,"las",{on:true,ok:x.ok===undefined?null:x.ok});n++}}catch(err){toast("Kunde inte låsa alla ("+n+" av "+xs.length+" klara).")}
     S.ar.rows=akItems();render();toast("Låste "+n+" transporter.");return}
@@ -1038,27 +1039,28 @@ const GEHAB=["62","63","64","65","66"],flNr=v=>String(v||"").trim().toUpperCase(
 S.fk={loc:{},sha:null,ok:false};S.fkv={q:"",nr:"",to:"",msg:""};
 const FKP="plan/_flak/all.json";
 async function loadFlak(){
-  if(!S.bundle||!S.bundle.planKey||!S.bundle.status)return false;
+  if(!S.bundle||!S.bundle.planKey||!S.bundle.status){S.fk.st={ok:false,msg:"Appen saknar åtkomst till flaklistan."};return false}
   try{const st=S.bundle.status,r=await fetch(GH+st.repo+"/contents/"+FKP+"?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});
-    if(r.status===404){S.fk.loc={};S.fk.sha=null;S.fk.ok=true;return true}if(!r.ok)throw 0;
-    const j=await r.json(),c=j.content.replace(/\n/g,"");S.fk.sha=j.sha;S.fk.loc=await openPlan(unb64(c));S.fk.ok=true;store.set("flak",c);return true}
-  catch(e){const c=store.get("flak");if(c&&!S.fk.ok){try{S.fk.loc=await openPlan(unb64(c))}catch(x){}}return false}}
+    if(r.status===404){S.fk.loc={};S.fk.sha=null;S.fk.ok=true;S.fk.st={ok:true,ts:Date.now(),empty:true};return true}
+    if(!r.ok){S.fk.st={ok:false,msg:"Servern svarade "+r.status};throw 0}
+    const j=await r.json(),c=j.content.replace(/\n/g,"");S.fk.sha=j.sha;S.fk.loc=await openPlan(unb64(c));S.fk.ok=true;store.set("flak",c);S.fk.st={ok:true,ts:Date.now()};return true}
+  catch(e){if(!S.fk.st||S.fk.st.ok)S.fk.st={ok:false,msg:"Kunde inte läsa listan ("+((e&&e.name)||"nätverk")+")"};const c=store.get("flak");if(c&&!S.fk.ok){try{S.fk.loc=await openPlan(unb64(c))}catch(x){}}return false}}
 async function saveFlak(mut){
   for(let i=0;i<4;i++){
-    if(!(await loadFlak()))throw new Error("net");
+    if(!(await loadFlak()))throw new Error("Kunde inte läsa listan först: "+((S.fk.st&&S.fk.st.msg)||""));
     mut(S.fk.loc);
     const st=S.bundle.status,body={message:pm("all"),content:b64(await sealPlan(S.fk.loc))};if(S.fk.sha)body.sha=S.fk.sha;
     const r=await fetch(GH+st.repo+"/contents/"+FKP,{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify(body)});
-    if(r.ok){S.fk.sha=(await r.json()).content.sha;store.set("flak",b64(await sealPlan(S.fk.loc)));return}
-    if(r.status!==409&&r.status!==422)throw new Error("put")}
-  throw new Error("konflikt")}
+    if(r.ok){S.fk.sha=(await r.json()).content.sha;S.fk.st={ok:true,ts:Date.now()};try{store.set("flak",b64(await sealPlan(S.fk.loc)))}catch(e){}return}
+    if(r.status!==409&&r.status!==422)throw new Error("Servern svarade "+r.status+" vid sparande")}
+  throw new Error("Konflikt – försök igen")}
 const fkQ=()=>{try{return JSON.parse(store.get("fkq")||"[]")}catch(e){return []}};
 async function flakMove(items){
   if(items&&items.length){const q=fkQ().concat(items);store.set("fkq",JSON.stringify(q));items.forEach(x=>{if(x.v)S.fk.loc[x.nr]=x.v;else delete S.fk.loc[x.nr]})}
   await flushFlak()}
 async function flushFlak(){
   if(S.fk.busy)return;const q=fkQ();if(!q.length)return;S.fk.busy=true;
-  try{await saveFlak(loc=>q.forEach(x=>{if(x.v)loc[x.nr]=x.v;else delete loc[x.nr]}));store.set("fkq",JSON.stringify(fkQ().slice(q.length)))}catch(e){}
+  try{await saveFlak(loc=>q.forEach(x=>{if(x.v)loc[x.nr]=x.v;else delete loc[x.nr]}));store.set("fkq",JSON.stringify(fkQ().slice(q.length)));S.fk.err=""}catch(e){S.fk.err=(e&&e.message)||"okänt fel"}
   finally{S.fk.busy=false}}
 const flakAt=place=>Object.keys(S.fk.loc||{}).filter(n=>(S.fk.loc[n]||{}).p===place).sort((a,b)=>(+a||0)-(+b||0)||a.localeCompare(b));
 function flakWhere(nr){const v=(S.fk.loc||{})[flNr(nr)];return v?(v.p?v.p:(v.car?"på "+v.car+(v.from?" (hämtad från "+v.from+")":""):"")):""}
@@ -1067,7 +1069,8 @@ function flakChips(place){const l=flakAt(place);
 function gehabWarn(nrs){const g=nrs.filter(isGehab);if(!g.length)return "";return (g.length>1?'⚠ Två Gehab-flak ('+g.join(", ")+') får inte åka samtidigt. ':'')+'Gehab-flak ('+g.join(", ")+') får bara stå på bilen, aldrig på släpet.'}
 function renderFlak(){
   const B=S.bundle,V=S.fkv,places=(B.places||[]),loc=S.fk.loc||{},all=Object.keys(loc);
-  let h='<div class="pagehead"><h2>Flak</h2><p class="muted">Var varje flak står just nu. Uppdateras av förarna när de lastar och lossar. Gehab-flak ('+GEHAB.join(", ")+') får bara åka på bilen, inte på släpet.</p></div>';
+  const fst=S.fk.st,stl=fst?(fst.ok?'<span class="muted" style="font-size:13px">Listan hämtad '+esc(hhmm(new Date(fst.ts).toISOString()))+(fst.empty?' (tom)':'')+'</span>':'<span style="color:#d03a3a;font-size:13px">⚠ '+esc(fst.msg)+'</span>'):'';
+  let h='<div class="pagehead"><h2>Flak</h2><p class="muted">Var varje flak står just nu. Uppdateras av förarna när de lastar och lossar. Gehab-flak ('+GEHAB.join(", ")+') får bara åka på bilen, inte på släpet. '+stl+(fkQ().length?' <b style="color:#d03a3a">'+fkQ().length+' ändringar väntar på att sparas.</b> <button class="btn small" data-fk="retry">Försök spara igen</button>':'')+'</p></div>';
   const sel='style="font:inherit;font-size:16px;padding:8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg)"';
   h+='<div class="card" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end"><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Flaknummer (ett eller flera, t.ex. 158, 145)<input id="fkNr" value="'+esc(V.nr)+'" '+sel+'></label><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Står på<select id="fkTo" '+sel+'>'+plOpts(V.to)+'</select></label><button class="btn go" data-fk="set">Flytta hit</button><button class="btn" data-fk="del">Ta bort flak ur listan</button></div>'+(V.msg?'<div class="notice">'+esc(V.msg)+'</div>':'');
   const gl=GEHAB.filter(n=>true);
@@ -1077,11 +1080,12 @@ function renderFlak(){
   h+='<div class="card" style="margin-top:12px"><b>Alla registrerade flak ('+all.length+')</b>'+(keys.length?keys.map(k=>'<div style="margin-top:10px"><span class="muted" style="font-weight:600">'+esc(k)+' ('+groups[k].length+')</span><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">'+groups[k].sort((a,b)=>(+a||0)-(+b||0)).map(n=>'<span class="pill '+(isGehab(n)?'p-antal':'p-type')+'">'+esc(n)+(isGehab(n)?' G':'')+'</span>').join("")+'</div></div>').join(""):'<p class="muted">Inga flak registrerade än. Skriv in vilka flak som står var ovan, så fyller förarna på resten när de lastar och lossar.</p>')+'</div>';
   return h}
 document.addEventListener("click",async e=>{const t=e.target.closest("[data-fk]");if(!t||!S.bundle||S.bundle.role!=="admin")return;
+  if(t.dataset.fk==="retry"){S.fk.err="";await flushFlak();S.fkv.msg=S.fk.err?"⚠ Fortfarande inte sparat: "+S.fk.err:"✓ Sparat på servern.";render();return}
   const V=S.fkv,nrs=String((document.getElementById("fkNr")||{}).value||"").split(/[^0-9A-Za-z]+/).map(flNr).filter(Boolean),to=(document.getElementById("fkTo")||{}).value||"";V.nr=nrs.join(", ");V.to=to;
   const pl=(S.bundle.places||[]).find(p=>p.id===to);
   if(!nrs.length){V.msg="Skriv minst ett flaknummer.";render();return}
-  if(t.dataset.fk==="set"){if(!pl){V.msg="Välj plats.";render();return}await flakMove(nrs.map(n=>({nr:n,v:{p:pl.name,ts:Date.now(),by:"kontoret"}})));V.msg="Flyttade "+nrs.join(", ")+" till "+pl.name+".";V.nr=""}
-  else{await flakMove(nrs.map(n=>({nr:n,v:null})));V.msg="Tog bort "+nrs.join(", ")+" ur listan.";V.nr=""}
+  if(t.dataset.fk==="set"){if(!pl){V.msg="Välj plats.";render();return}S.fk.err="";await flakMove(nrs.map(n=>({nr:n,v:{p:pl.name,ts:Date.now(),by:"kontoret"}})));V.msg=S.fk.err?"⚠ INTE SPARAT på servern: "+S.fk.err+". Försök igen (flaken ligger i kö på den här datorn).":"✓ Sparat på servern: "+nrs.join(", ")+" står på "+pl.name+". Förarna ser det efter nästa uppdatering.";V.nr=""}
+  else{S.fk.err="";await flakMove(nrs.map(n=>({nr:n,v:null})));V.msg=S.fk.err?"⚠ INTE SPARAT: "+S.fk.err:"✓ Tog bort "+nrs.join(", ")+" ur listan.";V.nr=""}
   render()});
 document.addEventListener("click",e=>{const t=e.target.closest("[data-lfpick]");if(!t||!S.lastForm)return;readLast();const F=S.lastForm,n=t.dataset.lfpick,legN=(F.antal||1);let i=F.nr.findIndex((x,j)=>j<legN&&!(x||"").trim());if(i<0)i=legN-1;F.nr[i]=n;const inp=document.querySelector('[data-lfn="'+i+'"]');if(inp)inp.value=n;render()});
 /* ---------- Starta arbetsdagen / avsluta dagen ---------- */
@@ -1192,7 +1196,7 @@ function flakView(){
   const groups={};all.filter(n=>!q||(n+" "+where(n)).toLowerCase().indexOf(q)>=0).forEach(n=>{(groups[where(n)]=groups[where(n)]||[]).push(n)});
   const keys=Object.keys(groups).sort();
   const o=document.createElement("div");o.id="fkview";o.style.cssText="position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column;padding:12px;gap:10px;overflow:auto";
-  o.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:19px">Var står flaken?</b><button class="btn" data-fv="close">Stäng</button></div><div class="muted" style="font-size:14px">Uppdateras när chaufförerna lastar och lossar. Gehab-flak ('+GEHAB.join(", ")+') får bara åka på bilen, inte på släpet.</div><input id="fkq" value="'+esc(S.fkq||"")+'" placeholder="Sök flaknummer eller plats…" style="font:inherit;font-size:17px;padding:10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg)">'+
+  o.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:19px">Var står flaken?</b><button class="btn" data-fv="close">Stäng</button></div><div class="muted" style="font-size:14px">Uppdateras när chaufförerna lastar och lossar. Gehab-flak ('+GEHAB.join(", ")+') får bara åka på bilen, inte på släpet.</div>'+(S.fk.st?(S.fk.st.ok?'<div class="muted" style="font-size:13px">Hämtad '+esc(hhmm(new Date(S.fk.st.ts).toISOString()))+(S.fk.st.empty?' – kontoret har inte lagt in några flak än.':'')+'</div>':'<div class="notice warn">⚠ '+esc(S.fk.st.msg)+' – visar senast sparade lista.</div>'):'')+'<input id="fkq" value="'+esc(S.fkq||"")+'" placeholder="Sök flaknummer eller plats…" style="font:inherit;font-size:17px;padding:10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg)">'+
     '<div class="card"><b>Gehab-flak</b><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">'+GEHAB.map(n=>'<span class="pill p-antal">'+n+': '+esc(loc[n]?where(n):"okänd plats")+'</span>').join("")+'</div></div>'+
     (keys.length?keys.map(k=>'<div class="card"><b>'+esc(k)+' <span class="muted">('+groups[k].length+')</span></b><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">'+groups[k].sort((a,b)=>(+a||0)-(+b||0)).map(n=>'<span class="pill '+(isGehab(n)?'p-antal':'p-type')+'" style="font-size:17px;padding:8px 12px">'+esc(n)+(isGehab(n)?' G':'')+'</span>').join("")+'</div></div>').join(""):'<div class="card muted">Inga flak hittades.</div>');
   document.body.appendChild(o);const i=document.getElementById("fkq");if(q&&i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}}
@@ -1201,9 +1205,11 @@ document.addEventListener("click",async e=>{const t=e.target.closest("[data-fv]"
   if(t.dataset.fv==="open"){S.fkq="";flakView();await loadFlak();flakView()}});
 document.addEventListener("input",e=>{if(e.target.id==="fkq"){S.fkq=e.target.value;flakView()}});
 /* ---------- Felanmälan / verkstad med bilder ---------- */
-const FT={fel:"Fel på bilen",slap:"Fel på släp / flak",skada:"Skada / olycka",verk:"Behöver verkstad",annat:"Annat"};
+const FT={station:"Fel på mack",fel:"Fel på bilen",slap:"Fel på släp / flak",skada:"Skada / olycka",verk:"Behöver verkstad",annat:"Annat"};
 const FA={snart:["Bör åtgärdas snart","p-warn"],kan:["Kan köra som vanligt","p-type"],ej:["Kan inte köra","p-warn"]};
 const FO=["Motor","Bromsar","Däck / hjul","Elsystem / lampor","Gasutrustning / ventiler","Lastsystem / koppling","Hytt","Annat"];
+const FAS={kan:["Går att tanka som vanligt","p-type"],snart:["Begränsat – bör åtgärdas","p-warn"],ej:["Går inte att tanka","p-warn"]};
+const FOS=["Pump / dispenser","Slang / koppling / ventil","Mätare / display","Kortläsare / inloggning","Gasläcka / gaslukt","Skada på anläggning","Stängt / ingen personal","Annat"];
 const FS={ny:["Ny","p-warn"],pagar:["Pågår","p-type"],klar:["Klar","p-full"]};
 S.fel=[];S.felSha={};S.felImg={};
 async function felPut(path,obj,sha,dir){const st=S.bundle.status,body={message:pm(dir),content:b64(await sealPlan(obj))};if(sha)body.sha=sha;
@@ -1225,7 +1231,7 @@ async function felImage(fileBase,i){const key=fileBase+"_"+i;if(S.felImg[key])re
 function felCard(){
   if(!(S.bundle&&S.bundle.role==="driver"&&S.bundle.status&&S.bundle.planKey))return "";
   const mine=S.fel.filter(x=>x.dir===S.bundle.dir),open=mine.filter(x=>x.status!=="klar").length;
-  return '<div class="card" style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div><b>Felanmälan / verkstad</b><div class="muted" style="font-size:14px">'+(mine.length?mine.length+' skickade'+(open?' · '+open+' pågående':''):'Anmäl fel eller skada, gärna med bild')+'</div></div><button class="btn" data-fe="open">Gör felanmälan</button></div>'}
+  return '<div class="card" style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div><b>Felanmälan / verkstad</b><div class="muted" style="font-size:14px">'+(mine.length?mine.length+' skickade'+(open?' · '+open+' pågående':''):'Anmäl fel eller skada, gärna med bild')+'</div></div><span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-fe="open">Gör felanmälan</button><button class="btn go" data-fe="openstn">Felrapport mack</button></span></div>'}
 function felOverlay(){
   document.getElementById("feview")&&document.getElementById("feview").remove();
   const inp='style="font:inherit;font-size:17px;padding:10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg);width:100%"';
@@ -1243,14 +1249,35 @@ function felOverlay(){
     '<div id="feErr"></div><div class="acts"><button class="btn go" data-fe="send">Skicka till kontoret</button></div>'+
     (mine.length?'<h3 style="margin:14px 0 4px">Dina felanmälningar</h3>'+mine.map(x=>{const st=FS[x.status]||FS.ny;return '<div class="card" style="margin:0 0 6px"><b>'+esc(x.rub||"Felanmälan")+'</b> <span class="pill '+st[1]+'">'+st[0]+'</span><div class="muted" style="font-size:13.5px">'+esc(new Date(x.ts).toLocaleDateString("sv-SE"))+' · '+esc(FT[x.typ]||"")+'</div>'+((x.logg||[]).filter(l=>l.text).slice(-1).map(l=>'<div class="notice msg" style="margin-top:6px"><b>Från kontoret</b><br>'+esc(l.text)+'</div>').join(""))+'</div>'}).join(""):"");
   o._imgs=[];document.body.appendChild(o)}
+function felOverlayStn(){
+  document.getElementById("feview")&&document.getElementById("feview").remove();
+  const inp='style="font:inherit;font-size:17px;padding:10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg);width:100%"';
+  const lab=t=>'<div class="muted" style="font-size:14px;margin-top:4px">'+t+'</div>';
+  const chips=(grp,obj,def)=>'<div class="chips">'+Object.keys(obj).map(k=>'<button type="button" class="chip" data-fe="chip" data-g="'+grp+'" data-k="'+k+'"'+(k===def?' aria-current="date"':'')+'>'+esc(obj[k][0])+'</button>').join("")+'</div>';
+  const places=(S.bundle.places||[]).filter(p=>p.kind==="station"||p.kind==="fyll");
+  const r=route(),def=r&&r.legs&&r.legs.length?(r.legs[r.legs.length-1].to||{}).name:"";
+  const mine=S.fel.filter(x=>x.dir===S.bundle.dir&&x.typ==="station");
+  const o=document.createElement("div");o.id="feview";o.dataset.typ="station";o.dataset.allv="snart";o.style.cssText="position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column;padding:12px;gap:8px;overflow:auto";
+  o.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:19px">Felrapport mack</b><button class="btn" data-fe="close">Stäng</button></div><div class="muted" style="font-size:14px">Ta bilder på felet – kontoret vidarebefordrar rapporten till Småländska Bränslen.</div>'+
+    lab("Vilken mack?")+'<select id="fePlats" '+inp+'><option value="">Välj mack</option>'+places.map(x=>'<option'+(x.name===def?' selected':'')+'>'+esc(x.name)+'</option>').join("")+'</select>'+
+    lab("Vad gäller felet?")+'<select id="feOmr" '+inp+'>'+FOS.map(x=>'<option>'+x+'</option>').join("")+'</select>'+
+    lab("Går det att tanka?")+chips("allv",FAS,"snart")+
+    lab("Rubrik")+'<input id="feRub" placeholder="Kort beskrivning, t.ex. Pump 2 läcker" '+inp+'>'+
+    lab("Beskriv felet")+'<textarea id="feTxt" rows="4" placeholder="Vad händer? Pumpnummer, felkod, vem du pratat med på plats…" '+inp+'></textarea><input id="feKm" type="hidden" value="">'+
+    lab("Bilder (upp till 6) – fota felet, pumpen, skyltar")+'<label class="btn go" style="text-align:center;cursor:pointer;font-size:18px;padding:14px">📷 Ta bild / välj bild<input id="feFiles" type="file" accept="image/*" capture="environment" multiple style="display:none"></label><div id="feThumbs" style="display:flex;gap:8px;flex-wrap:wrap"></div>'+
+    '<div id="feErr"></div><div class="acts"><button class="btn go big" data-fe="send">Skicka till kontoret</button></div>'+
+    (mine.length?'<h3 style="margin:14px 0 4px">Dina rapporter</h3>'+mine.map(x=>{const st=FS[x.status]||FS.ny;return '<div class="card" style="margin:0 0 6px"><b>'+esc(x.rub||"Felrapport")+'</b> <span class="pill '+st[1]+'">'+st[0]+'</span><div class="muted" style="font-size:13.5px">'+esc(new Date(x.ts).toLocaleDateString("sv-SE"))+' · '+esc(x.plats||"")+'</div></div>'}).join(""):'');
+  o._imgs=[];o._max=6;document.body.appendChild(o)}
 document.addEventListener("change",async e=>{if(e.target.id!=="feFiles")return;const o=document.getElementById("feview");
-  for(const f of e.target.files){if(o._imgs.length>=4)break;try{o._imgs.push(await felShrink(f))}catch(x){}}e.target.value="";
+  for(const f of e.target.files){if(o._imgs.length>=(o._max||4))break;try{o._imgs.push(await felShrink(f))}catch(x){}}e.target.value="";
   o.querySelector("#feThumbs").innerHTML=o._imgs.map(u=>'<img src="'+u+'" style="width:78px;height:78px;object-fit:cover;border-radius:4px">').join("")});
 document.addEventListener("click",async e=>{const t=e.target.closest("[data-fe]");if(!t||!S.bundle)return;const a=t.dataset.fe;
   if(a==="open"){felOverlay();return}
+  if(a==="openstn"){felOverlayStn();return}
   if(a==="close"){const o=document.getElementById("feview");o&&o.remove();return}
   if(a==="chip"){const o=document.getElementById("feview");o.dataset[t.dataset.g]=t.dataset.k;o.querySelectorAll('[data-g="'+t.dataset.g+'"]').forEach(b=>b.removeAttribute("aria-current"));t.setAttribute("aria-current","date");return}
   if(a==="send"){const o=document.getElementById("feview"),g=id=>o.querySelector("#"+id).value.trim(),err=m=>{o.querySelector("#feErr").innerHTML='<div class="notice warn">'+esc(m)+'</div>'};
+    if(o.dataset.typ==="station"&&!g("fePlats")){err("Välj vilken mack det gäller.");return}
     if(!g("feRub")&&!g("feTxt")&&!o._imgs.length){err("Skriv en rubrik eller en beskrivning.");return}
     t.disabled=true;t.textContent="Skickar…";const c=S.bundle.car||{},id=S.bundle.dir+"_"+Date.now().toString(36);
     const meta={id,dir:S.bundle.dir,car:c.id,carName:c.name||"",namn:c.driver||"",ts:Date.now(),typ:o.dataset.typ,allv:o.dataset.allv,omr:g("feOmr"),rub:g("feRub"),text:g("feTxt"),plats:g("fePlats"),km:g("feKm"),bilder:o._imgs.length,status:"ny",logg:[]};
@@ -1262,23 +1289,34 @@ document.addEventListener("click",async e=>{const t=e.target.closest("[data-fe]"
 S.fv={f:"akt",open:null};
 function felNy(){return S.fel.filter(x=>x.status==="ny").length}
 function renderFel(){
-  const A=S.fv,all=S.fel,list=all.filter(x=>A.f==="alla"||(A.f==="akt"?x.status!=="klar":x.status===A.f));
+  const A=S.fv,all=S.fel,list=all.filter(x=>A.f==="alla"||(A.f==="mack"?x.typ==="station":(A.f==="akt"?x.status!=="klar":x.status===A.f)));
   let h='<div class="pagehead"><h2>Verkstad</h2><p class="muted">Felanmälningar från förarna, med bilder. Svara och uppdatera status så ser föraren det direkt.</p></div>';
-  h+='<div class="chips" style="margin-bottom:10px">'+[["akt","Pågående"],["ny","Nya"],["pagar","Pågår"],["klar","Klara"],["alla","Alla"]].map(([k,l])=>'<button class="chip" data-fv="f" data-k="'+k+'"'+(A.f===k?' aria-current="date"':'')+'>'+l+'</button>').join("")+'</div>';
+  h+='<div class="chips" style="margin-bottom:10px">'+[["akt","Pågående"],["ny","Nya"],["pagar","Pågår"],["klar","Klara"],["mack","Mackar"],["alla","Alla"]].map(([k,l])=>'<button class="chip" data-fv="f" data-k="'+k+'"'+(A.f===k?' aria-current="date"':'')+'>'+l+'</button>').join("")+'</div>';
   if(!list.length)return h+'<div class="card muted">Inga felanmälningar här.</div>';
   setTimeout(felHydrate,0);
-  return h+list.map(x=>{const st=FS[x.status]||FS.ny,al=FA[x.allv]||FA.snart,op=A.open===x.id;
+  return h+list.map(x=>{const st=FS[x.status]||FS.ny,al=(x.typ==="station"?FAS:FA)[x.allv]||FA.snart,op=A.open===x.id;
     let b='<div class="card" style="margin-bottom:10px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between"><div><b style="font-size:17px">'+esc(x.rub||"Felanmälan")+'</b><div class="muted" style="font-size:13.5px">'+esc(x.carName)+' · '+esc((x.namn||"").split(" ")[0])+' · '+esc(new Date(x.ts).toLocaleString("sv-SE",{dateStyle:"short",timeStyle:"short"}))+'</div></div><span style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill '+al[1]+'">'+esc(al[0])+'</span><span class="pill p-type">'+esc(FT[x.typ]||"")+'</span><span class="pill '+st[1]+'">'+st[0]+'</span></span></div>';
     b+='<div style="margin-top:8px;font-size:15px">'+(x.omr?'<span class="muted">Område:</span> '+esc(x.omr)+'<br>':'')+(x.text?esc(x.text).replace(/\n/g,"<br>")+'<br>':'')+(x.plats?'<span class="muted">Plats:</span> '+esc(x.plats)+'<br>':'')+(x.km?'<span class="muted">Mätarställning:</span> '+esc(x.km)+' km':'')+'</div>';
     if(x.bilder)b+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">'+Array.from({length:x.bilder},(_,i)=>'<img data-fi="'+esc(x._file.replace(/\.json$/,""))+'|'+i+'" alt="" style="width:110px;height:110px;object-fit:cover;border-radius:4px;background:var(--sunk);cursor:zoom-in">').join("")+'</div>';
     if((x.logg||[]).length)b+='<div style="margin-top:8px">'+x.logg.map(l=>'<div class="muted" style="font-size:13.5px">'+esc(new Date(l.ts).toLocaleString("sv-SE",{dateStyle:"short",timeStyle:"short"}))+' · '+esc(FS[l.status]?FS[l.status][0]:"")+(l.text?': '+esc(l.text):'')+'</div>').join("")+'</div>';
+    if(x.typ==="station")b+='<div style="margin-top:10px"><button class="btn go small" data-fv="fwd" data-id="'+esc(x.id)+'">📤 Vidarebefordra till Småländska Bränslen</button> <span class="muted" style="font-size:13px">Delar text och bilder via mejl/meddelande</span></div>';
     b+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center"><input id="fr-'+esc(x.id)+'" placeholder="Svar / notering till föraren (valfritt)" style="flex:1;min-width:200px;font:inherit;padding:9px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--fg)">'+
       ["pagar","klar","ny"].filter(k=>k!==x.status).map(k=>'<button class="btn small'+(k==="klar"?' go':'')+'" data-fv="st" data-id="'+esc(x.id)+'" data-k="'+k+'">'+({pagar:"Markera pågår",klar:"Markera klar",ny:"Öppna igen"})[k]+'</button>').join("")+'<button class="btn small" data-fv="note" data-id="'+esc(x.id)+'">Skicka svar</button></div></div>';
     return b}).join("")}
+async function felForward(x){
+  const txt="Felrapport mack – "+(x.plats||"")+"\n"+(x.rub?x.rub+"\n":"")+"Typ av fel: "+(x.omr||"–")+"\nTankning: "+((FAS[x.allv]||[""])[0])+"\n"+(x.text?"\n"+x.text+"\n":"")+"\nRapporterad av "+(x.carName||"")+(x.namn?" ("+x.namn+")":"")+" "+new Date(x.ts).toLocaleString("sv-SE",{dateStyle:"short",timeStyle:"short"})+"\nSmålands Gastransport";
+  const files=[];for(let i=0;i<(x.bilder||0);i++){try{const d=await felImage(x._file.replace(/\.json$/,""),i),bl=await (await fetch(d)).blob();files.push(new File([bl],"mack-"+(x.plats||"fel").replace(/[^A-Za-z0-9åäöÅÄÖ]+/g,"-")+"-"+(i+1)+".jpg",{type:"image/jpeg"}))}catch(e){}}
+  const subj="Felrapport mack: "+(x.plats||"")+(x.rub?" – "+x.rub:"");
+  if(navigator.canShare&&files.length&&navigator.canShare({files})){try{await navigator.share({files,title:subj,text:txt});return}catch(e){if(e&&e.name==="AbortError")return}}
+  if(navigator.share&&!files.length){try{await navigator.share({title:subj,text:txt});return}catch(e){if(e&&e.name==="AbortError")return}}
+  files.forEach((f,i)=>setTimeout(()=>{const a=document.createElement("a");a.href=URL.createObjectURL(f);a.download=f.name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},3000)},i*400));
+  const to=store.get("fwdto")||"";window.location.href="mailto:"+encodeURIComponent(to)+"?subject="+encodeURIComponent(subj)+"&body="+encodeURIComponent(txt+(files.length?"\n\n(Bilderna har laddats ner – bifoga dem i mejlet.)":""));
+  toast(files.length?"Bilderna laddas ner – bifoga dem i mejlet.":"Mejlet är förberett.")}
 async function felHydrate(){for(const im of document.querySelectorAll("img[data-fi]:not([data-done])")){im.dataset.done=1;const [f,i]=im.dataset.fi.split("|");try{im.src=await felImage(f,i)}catch(e){}}}
 document.addEventListener("click",async e=>{const t=e.target.closest("[data-fv],img[data-fi]");if(!t||!S.bundle)return;
   if(t.tagName==="IMG"){if(!t.src)return;const o=document.createElement("div");o.style.cssText="position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:12px;cursor:zoom-out";o.innerHTML='<img src="'+t.src+'" style="max-width:100%;max-height:100%">';o.onclick=()=>o.remove();document.body.appendChild(o);return}
   const a=t.dataset.fv;if(a==="f"){S.fv.f=t.dataset.k;render();return}
+  if(a==="fwd"){const x=S.fel.find(y=>y.id===t.dataset.id);if(!x)return;t.disabled=true;try{await felForward(x)}catch(err){toast("Kunde inte förbereda rapporten.")}t.disabled=false;return}
   if(a==="st"||a==="note"){const x=S.fel.find(y=>y.id===t.dataset.id);if(!x)return;const inp=document.getElementById("fr-"+x.id),text=(inp&&inp.value||"").trim();const ns=a==="st"?t.dataset.k:x.status;
     if(a==="note"&&!text){toast("Skriv ett svar först.");return}
     t.disabled=true;try{const d=Object.assign({},x);delete d._file;delete d._sha;d.status=ns;d.logg=(x.logg||[]).concat([{ts:Date.now(),status:ns,text}]);
