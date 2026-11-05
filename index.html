@@ -383,7 +383,7 @@ async function afterLoad(force){
   if(window.ARKIV)return akLoad();
   if(force!==true&&S.lastDay===today()&&!(await repoHead())){if(S.bundle.role==="driver"&&pendingCount())await sync();return}
   S.lastDay=today();S.fresh=true;
-  ensurePush();loadFlak().then(()=>flushFlak()).then(()=>render()).catch(()=>{});ejFlush().catch(()=>{});
+  ensurePush();loadFlak().then(()=>flushFlak()).then(()=>render()).catch(()=>{});loadPers().then(()=>render()).catch(()=>{});ejFlush().catch(()=>{});
   if(S.bundle.role==='admin'){await loadPlansAdmin();await loadNotes();await loadPauser();await loadSwaps();await loadLedig();await loadFel();await loadHamt();await loadStat();if(S.view==='ark')arLoad().then(()=>render());
     const ds=[...new Set([today(),iso(new Date(Date.now()+864e5)),S.pl.date||today(),S.date].filter(Boolean))];
     await Promise.all((S.bundle.planCars||[]).filter(c=>c.dir).map(async c=>{for(const d of (S.view==='paus'?[...new Set(ds.concat(pausDays()))]:ds)){await ghList(c.dir,d);await fetchNy(c.dir,d)}}))}
@@ -1090,7 +1090,7 @@ document.addEventListener("click",async e=>{const t=e.target.closest("[data-fk]"
 document.addEventListener("click",e=>{const t=e.target.closest("[data-lfpick]");if(!t||!S.lastForm)return;readLast();const F=S.lastForm,n=t.dataset.lfpick,legN=(F.antal||1);let i=F.nr.findIndex((x,j)=>j<legN&&!(x||"").trim());if(i<0)i=legN-1;F.nr[i]=n;const inp=document.querySelector('[data-lfn="'+i+'"]');if(inp)inp.value=n;render()});
 /* ---------- Starta arbetsdagen / avsluta dagen ---------- */
 const DRIVERS=["Arne Carlsson","Annelie Steen","Niklas Hellstrand"];
-function drvList(){const B=S.bundle,set=new Set(DRIVERS);(B.planCars||[]).forEach(c=>{if(c.driver)set.add(c.driver)});if(B.car&&B.car.driver)set.add(B.car.driver);
+function drvList(){const B=S.bundle,set=new Set(DRIVERS);(S.pers.list||[]).forEach(x=>{if(x.roll==="Chaufför"&&x.namn){if(x.akt!==false)set.add(x.namn);else set.delete(x.namn)}});(B.planCars||[]).forEach(c=>{if(c.driver)set.add(c.driver)});if(B.car&&B.car.driver)set.add(B.car.driver);
   const r=B.days&&B.days[today()];if(r&&r.driver)set.add(r.driver);const l=store.get("lastdrv:"+B.dir);if(l)set.add(l);return [...set]}
 function curDriver(dir,date,fallback){const st=statesFor(dir,date),f=st.get("dag|forare"),s0=st.get("dag|dagstart");
   if(f){const d=evData(f);if(d.namn)return d.namn}
@@ -1204,6 +1204,63 @@ document.addEventListener("click",async e=>{const t=e.target.closest("[data-fv]"
   if(t.dataset.fv==="close"){const o=document.getElementById("fkview");if(o)o.remove();return}
   if(t.dataset.fv==="open"){S.fkq="";flakView();await loadFlak();flakView()}});
 document.addEventListener("input",e=>{if(e.target.id==="fkq"){S.fkq=e.target.value;flakView()}});
+/* ---------- Personal: chaufförer, anställda och andra kontakter ---------- */
+const PEP="plan/_personal/all.json",ROLLER=["Chaufför","Kontor","Verkstad","Kund / station","Annan"];
+S.pers={list:[],sha:null,ok:false,st:null};S.pe={q:"",roll:"alla",f:null,msg:"",del:null};
+async function loadPers(){
+  if(!S.bundle||!S.bundle.planKey||!S.bundle.status)return false;
+  try{const st=S.bundle.status,r=await fetch(GH+st.repo+"/contents/"+PEP+"?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});
+    if(r.status===404){S.pers.list=[];S.pers.sha=null;S.pers.ok=true;S.pers.st={ok:true};return true}
+    if(!r.ok){S.pers.st={ok:false,msg:"Servern svarade "+r.status};throw 0}
+    const j=await r.json(),c=j.content.replace(/\n/g,"");S.pers.sha=j.sha;const d=await openPlan(unb64(c));S.pers.list=Array.isArray(d)?d:[];S.pers.ok=true;S.pers.st={ok:true};store.set("pers",c);return true}
+  catch(e){if(!S.pers.st||S.pers.st.ok)S.pers.st={ok:false,msg:"Kunde inte läsa personallistan"};const c=store.get("pers");if(c&&!S.pers.ok){try{const d=await openPlan(unb64(c));S.pers.list=Array.isArray(d)?d:[]}catch(x){}}return false}}
+async function savePers(mut){
+  for(let i=0;i<4;i++){
+    if(!(await loadPers()))throw new Error((S.pers.st&&S.pers.st.msg)||"kunde inte läsa");
+    mut(S.pers.list);
+    const st=S.bundle.status,body={message:pm("all"),content:b64(await sealPlan(S.pers.list))};if(S.pers.sha)body.sha=S.pers.sha;
+    const r=await fetch(GH+st.repo+"/contents/"+PEP,{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify(body)});
+    if(r.ok){S.pers.sha=(await r.json()).content.sha;try{store.set("pers",b64(await sealPlan(S.pers.list)))}catch(e){}return}
+    if(r.status!==409&&r.status!==422)throw new Error("Servern svarade "+r.status)}
+  throw new Error("Konflikt – försök igen")}
+const dagarTill=d=>d?Math.round((new Date(d+"T12:00:00")-new Date(today()+"T12:00:00"))/864e5):null;
+function persDatum(label,d){if(!d)return "";const n=dagarTill(d),c=n<0?"#d03a3a":n<=60?"#b26b00":"var(--muted)";return '<span style="color:'+c+'">'+label+' '+esc(d)+(n<0?' (utgånget!)':n<=60?' (om '+n+' dagar)':'')+'</span>'}
+function readPe(){const F=S.pe.f;if(!F||!document.getElementById("peNamn"))return;const g=id=>document.getElementById(id);
+  F.namn=g("peNamn").value;F.roll=g("peRoll").value;F.tel=g("peTel").value;F.mail=g("peMail").value;F.bil=g("peBil").value;F.adr=g("peAdr").value;F.kort=g("peKort").value;F.not=g("peNot").value;F.akt=g("peAkt").checked}
+function renderPers(){
+  const P=S.pe,list=(S.pers.list||[]).slice().sort((a,b)=>(a.namn||"").localeCompare(b.namn||"","sv")),q=P.q.trim().toLowerCase();
+  const inp='style="font:inherit;font-size:16px;padding:9px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg);width:100%"';
+  let h='<div class="pagehead"><h2>Personal</h2><p class="muted">Chaufförer, anställda och andra kontakter. Lägg inte in personnummer eller lösenord här – listan kan läsas av appens inloggningar.</p></div>';
+  if(S.pers.st&&!S.pers.st.ok)h+='<div class="notice warn">⚠ '+esc(S.pers.st.msg)+'</div>';
+  if(P.msg)h+='<div class="notice">'+esc(P.msg)+'</div>';
+  h+='<div class="card" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between"><div class="chips">'+["alla"].concat(ROLLER).map(r=>'<button class="chip" data-pe="roll" data-k="'+esc(r)+'"'+(P.roll===r?' aria-current="date"':'')+'>'+(r==="alla"?"Alla":esc(r))+' <span>'+(r==="alla"?list.length:list.filter(x=>x.roll===r).length)+'</span></button>').join("")+'</div><span style="display:flex;gap:8px;flex-wrap:wrap"><input id="peq" placeholder="Sök namn, telefon…" value="'+esc(P.q)+'" '+inp.replace("width:100%","width:200px")+'><button class="btn go" data-pe="new">+ Lägg till person</button></span></div>';
+  if(P.f){const F=P.f,cars=(S.bundle.planCars||[]);
+    const fld=(l,x)=>'<label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px;flex:1;min-width:200px">'+l+x+'</label>';
+    h+='<div class="card" style="margin-top:12px;display:flex;flex-direction:column;gap:10px"><b>'+(F.id?'Ändra person':'Ny person')+'</b><div style="display:flex;gap:10px;flex-wrap:wrap">'+
+      fld('Namn','<input id="peNamn" value="'+esc(F.namn)+'" '+inp+'>')+fld('Roll','<select id="peRoll" '+inp+'>'+ROLLER.map(r=>'<option'+(r===F.roll?' selected':'')+'>'+r+'</option>').join("")+'</select>')+'</div><div style="display:flex;gap:10px;flex-wrap:wrap">'+
+      fld('Telefon','<input id="peTel" inputmode="tel" value="'+esc(F.tel)+'" '+inp+'>')+fld('E-post','<input id="peMail" inputmode="email" value="'+esc(F.mail)+'" '+inp+'>')+fld('Vanlig bil','<select id="peBil" '+inp+'><option value="">–</option>'+cars.map(c=>'<option'+(c.name===F.bil?' selected':'')+'>'+esc(c.name)+'</option>').join("")+'</select>')+'</div><div style="display:flex;gap:10px;flex-wrap:wrap">'+
+      fld('ADR-intyg giltigt t.o.m.','<input id="peAdr" type="date" value="'+esc(F.adr)+'" '+inp+'>')+fld('Körkort / YKB giltigt t.o.m.','<input id="peKort" type="date" value="'+esc(F.kort)+'" '+inp+'>')+'</div>'+
+      fld('Anteckning','<textarea id="peNot" rows="3" '+inp+'>'+esc(F.not)+'</textarea>')+'<label style="display:flex;gap:8px;align-items:center"><input id="peAkt" type="checkbox"'+(F.akt?' checked':'')+' style="width:20px;height:20px"> Aktiv (visas i chaufförsval)</label>'+(F.err?'<div class="notice warn">'+esc(F.err)+'</div>':'')+
+      '<div class="acts"><button class="btn go" data-pe="save">Spara</button><button class="btn" data-pe="cancel">Avbryt</button></div></div>'}
+  const vis=list.filter(x=>(P.roll==="alla"||x.roll===P.roll)&&(!q||[x.namn,x.tel,x.mail,x.roll,x.bil,x.not].join(" ").toLowerCase().indexOf(q)>=0));
+  if(!list.length&&!P.f)h+='<div class="card" style="margin-top:12px"><p style="margin:0 0 10px">Inga personer inlagda än.</p><button class="btn" data-pe="seed">Lägg in Arne, Annelie och Niklas</button></div>';
+  h+=vis.map(x=>'<div class="card" style="margin-top:10px;'+(x.akt===false?'opacity:.6':'')+'"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline"><div><b style="font-size:18px">'+esc(x.namn)+'</b> <span class="pill p-type">'+esc(x.roll||"")+'</span>'+(x.akt===false?' <span class="pill p-warn">Inaktiv</span>':'')+'</div><span style="display:flex;gap:8px"><button class="btn small" data-pe="edit" data-id="'+esc(x.id)+'">Ändra</button><button class="btn link" data-pe="del" data-id="'+esc(x.id)+'">'+(P.del===x.id?'Tryck igen för att ta bort':'Ta bort')+'</button></span></div>'+
+    '<div style="margin-top:6px;font-size:15px;display:flex;flex-direction:column;gap:3px">'+(x.tel?'<span>📞 <a href="tel:'+esc(x.tel.replace(/[^+0-9]/g,""))+'">'+esc(x.tel)+'</a></span>':'')+(x.mail?'<span>✉ <a href="mailto:'+esc(x.mail)+'">'+esc(x.mail)+'</a></span>':'')+(x.bil?'<span class="muted">Vanlig bil: '+esc(x.bil)+'</span>':'')+persDatum("ADR-intyg t.o.m.",x.adr)+persDatum("Körkort/YKB t.o.m.",x.kort)+(x.not?'<span class="muted">'+esc(x.not).replace(/\n/g,"<br>")+'</span>':'')+'</div></div>').join("");
+  if(list.length&&!vis.length)h+='<div class="card muted" style="margin-top:10px">Inga träffar.</div>';
+  return h}
+document.addEventListener("input",e=>{if(e.target.id==="peq"){S.pe.q=e.target.value;const p=e.target.selectionStart;render();const i=document.getElementById("peq");if(i){i.focus();i.setSelectionRange(p,p)}}});
+document.addEventListener("click",async e=>{const t=e.target.closest("[data-pe]");if(!t||!S.bundle||S.bundle.role!=="admin")return;readPe();const P=S.pe,a=t.dataset.pe;
+  const blank=()=>({id:"",namn:"",roll:"Chaufför",tel:"",mail:"",bil:"",adr:"",kort:"",not:"",akt:true,err:""});
+  if(a==="roll"){P.roll=t.dataset.k;render();return}
+  if(a==="new"){P.f=blank();render();return}
+  if(a==="cancel"){P.f=null;render();return}
+  if(a==="edit"){const x=S.pers.list.find(y=>y.id===t.dataset.id);if(x){P.f=Object.assign(blank(),x,{akt:x.akt!==false});render()}return}
+  if(a==="del"){if(P.del!==t.dataset.id){P.del=t.dataset.id;render();return}P.del=null;try{await savePers(l=>{const i=l.findIndex(y=>y.id===t.dataset.id);if(i>=0)l.splice(i,1)});P.msg="✓ Borttagen."}catch(err){P.msg="⚠ Kunde inte ta bort: "+err.message}render();return}
+  if(a==="seed"){const mk=(n,b)=>({id:"p"+Math.random().toString(36).slice(2,9),namn:n,roll:"Chaufför",tel:"",mail:"",bil:b,adr:"",kort:"",not:"",akt:true});
+    try{await savePers(l=>{if(l.length)return;(S.bundle.planCars||[]).forEach(c=>{if(c.driver)l.push(mk(c.driver,c.name))})});P.msg="✓ Inlagda."}catch(err){P.msg="⚠ "+err.message}render();return}
+  if(a==="save"){const F=P.f;if(!F)return;F.namn=(F.namn||"").trim();if(!F.namn){F.err="Skriv ett namn.";render();return}
+    const rec={id:F.id||"p"+Math.random().toString(36).slice(2,9),namn:F.namn,roll:F.roll,tel:(F.tel||"").trim(),mail:(F.mail||"").trim(),bil:F.bil,adr:F.adr,kort:F.kort,not:(F.not||"").trim(),akt:!!F.akt};
+    t.disabled=true;try{await savePers(l=>{const i=l.findIndex(y=>y.id===rec.id);if(i>=0)l[i]=rec;else l.push(rec)});P.f=null;P.msg="✓ Sparat: "+rec.namn+"."}catch(err){F.err="Kunde inte spara: "+err.message;t.disabled=false}render();return}});
 /* ---------- Felanmälan / verkstad med bilder ---------- */
 const FT={station:"Fel på mack",fel:"Fel på bilen",slap:"Fel på släp / flak",skada:"Skada / olycka",verk:"Behöver verkstad",annat:"Annat"};
 const FA={snart:["Bör åtgärdas snart","p-warn"],kan:["Kan köra som vanligt","p-type"],ej:["Kan inte köra","p-warn"]};
@@ -1845,7 +1902,7 @@ function renderAdmin(){
 }
 function render(){
   if(S.bundle&&S.bundle.role==="driver"&&!S.dk.busy)setTimeout(dkSync,50);
-  readLast();readNt();readLv();readHf();readAc();if(S.bundle&&S.bundle.role==='admin'&&S.view==='msg')readMsg();if(S.bundle&&S.bundle.role==='admin'&&S.view==='plan')readPl();
+  readLast();readNt();readLv();readHf();readAc();readPe();if(S.bundle&&S.bundle.role==='admin'&&S.view==='msg')readMsg();if(S.bundle&&S.bundle.role==='admin'&&S.view==='plan')readPl();
   const M=$("#main");
   $("#switch").hidden=!S.sess;$("#switch").textContent="Logga ut";
   $("#status").textContent=S.cars?((S.offline?"Utan nät – visar senast hämtade. ":"")+"Senast publicerad "+new Date(S.cars.updated).toLocaleString("sv-SE",{dateStyle:"short",timeStyle:"short"})+"."):"";
@@ -1872,9 +1929,9 @@ function render(){
   if(isOv()){
     if(S.bundle.role==="ekonomi"){M.innerHTML='<div class="content">'+renderSum()+'</div>';return}
     const cnt=(S.bundle.planCars||[]).reduce((a,c)=>a+notisUnread(c.dir,today()).length+notisUnread(c.dir,iso(new Date(Date.now()+864e5))).length,0)+andringNek();
-    const items=[["ov","Översikt",cnt],["plan","Planering",0],["msg","Meddelanden",0],["stat","Stationer",0],["paus","Pauser",0],["ham","Hämtningar",hmOpen()],["fel","Verkstad",felNy()],["ark","Arkiv",0],["flk","Flak",0],["led","Ledighet",S.led.filter(x=>x.status==="ny").length],["vec","Vecka",0],["mil","Milrapport",0],["sum","Sammanställning",0]];
+    const items=[["ov","Översikt",cnt],["plan","Planering",0],["msg","Meddelanden",0],["stat","Stationer",0],["paus","Pauser",0],["ham","Hämtningar",hmOpen()],["fel","Verkstad",felNy()],["ark","Arkiv",0],["flk","Flak",0],["pers","Personal",0],["led","Ledighet",S.led.filter(x=>x.status==="ny").length],["vec","Vecka",0],["mil","Milrapport",0],["sum","Sammanställning",0]];
     const nav='<nav class="side"><div class="sidehd">Kontoret</div>'+items.map(([k,l,n])=>'<button data-view="'+k+'"'+(S.view===k?' aria-current="page"':'')+'><span>'+l+'</span>'+(n?'<i class="badge">'+n+'</i>':'')+'</button>').join("")+'</nav>';
-    M.innerHTML='<div class="shell">'+nav+'<div class="content">'+(S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="flk"?renderFlak():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'</div></div>';return}
+    M.innerHTML='<div class="shell">'+nav+'<div class="content">'+(S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'</div></div>';return}
   const ds=days();let h=alertsHtml()+startBar();
   if(ds.length)h+='<div class="chips">'+ds.map(d=>'<button class="chip" data-date="'+d+'"'+(d===S.date?' aria-current="date"':'')+'>'+esc(dayLabel(d))+' <span>'+(S.bundle.days[d]?S.bundle.days[d].legs.length+' st':'–')+'</span></button>').join("")+'</div>';
   const r=route();
