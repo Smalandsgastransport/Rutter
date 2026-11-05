@@ -340,8 +340,8 @@ const S={cars:null,sess:null,key:null,bundle:null,date:null,offline:false,busy:f
 try{S.sess=JSON.parse(store.get("sess")||"null")}catch(e){}
 function iso(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
 const today=()=>iso(new Date());
-const START="2026-11-05";/* första skarpa dagen: allt äldre döljs i appen */
-const TEST_DATES=[],isTest=d=>TEST_DATES.indexOf(d)>=0||d<START;
+const START="2026-11-05";const lowDate=()=>S.bundle&&S.bundle.role==="admin"?"2000-01-01":START;/* första skarpa dagen: allt äldre döljs i appen */
+const TEST_DATES=[],isTest=d=>TEST_DATES.indexOf(d)>=0||d<lowDate();
 function dayLabel(s){const d=new Date(s+"T12:00:00");return DAYS[d.getDay()].replace(/^./,c=>c.toUpperCase())+" "+d.getDate()+" "+MON[d.getMonth()]+(isTest(s)?" (TEST)":"")}
 function hhmm(s){if(!s)return "";const d=new Date(s);return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")}
 function toast(m){const h=$("#toastHost");h.innerHTML='<div class="toast" role="status">'+esc(m)+'</div>';clearTimeout(toast.t);toast.t=setTimeout(()=>h.innerHTML="",3500)}
@@ -685,7 +685,7 @@ const planDate=n=>String(n).replace(/\.json$/,"");
 function ovDay(p){return {self:!!p.self,driver:p.driver,trailer:p.trailer,updated:p.updated,legs:(p.legs||[]).map((l,i)=>({order:l.order,seq:i+1,load:l.load,antal:l.antal,mangd:l.mangd,uppdrag:l.uppdrag,from:l.from.name,to:l.to.name}))}}
 function planToRoute(p){const f=(p.driver||"").split(" ")[0]||"Chauffor";return {dDate:p.dDate||p.date,company:p.company||"Småländska Bränslen AB",fullQty:"14 m³",date:p.date,car:p.car,carName:p.carName||"",reg:p.reg||"",trailer:p.trailer||"",driver:p.driver||"",released:p.updated,updated:p.updated,allPdf:null,allPdfName:"Deklarationer-"+f+"-"+p.date+".pdf",legs:(p.legs||[]).map((l,i)=>Object.assign({},l,{seq:i+1,local:true,pdf:null}))}}
 async function fetchPlans(dir,minDate){
-  if(!minDate||minDate<START)minDate=START;
+  if(!minDate||minDate<lowDate())minDate=lowDate();
   const list=await ghPlanList(dir),idxKey="planidx:"+dir;let names;
   if(list===null){try{names=JSON.parse(store.get(idxKey)||"[]")}catch(e){names=[]};}
   else{(S.planOk=S.planOk||{})[dir]=new Set(list.map(x=>planDate(x.name)));names=list.map(x=>x.name).filter(n=>/^\d{4}-\d{2}-\d{2}\.json$/.test(n)&&planDate(n)>=minDate);store.set(idxKey,JSON.stringify(names))}
@@ -716,11 +716,11 @@ async function hydratePlans(){
   if(!S.bundle||!S.bundle.planKey)return;
   const dirs=S.bundle.role==="driver"?[S.bundle.dir]:(S.bundle.planCars||[]).map(c=>c.dir).filter(Boolean);
   for(const dir of dirs){let names=[];try{names=JSON.parse(store.get("planidx:"+dir)||"[]")}catch(e){}
-    for(const n of names){const d=planDate(n),k=dir+"|"+d;if(d<START||S.plans[k])continue;const c=store.get("plan:"+k);if(c)try{S.plans[k]=await openPlan(unb64(c))}catch(e){}}}
+    for(const n of names){const d=planDate(n),k=dir+"|"+d;if(d<lowDate()||S.plans[k])continue;const c=store.get("plan:"+k);if(c)try{S.plans[k]=await openPlan(unb64(c))}catch(e){}}}
   applyCachedPlans()}
 function applyCachedPlans(){
   if(!S.bundle||!S.bundle.planKey)return;
-  const by=dir=>{const ps={};Object.keys(S.plans).forEach(k=>{if(k.indexOf(dir+"|")===0){const d=k.slice(dir.length+1);if(d>=START)ps[d]=S.plans[k]}});return ps};
+  const by=dir=>{const ps={};Object.keys(S.plans).forEach(k=>{if(k.indexOf(dir+"|")===0){const d=k.slice(dir.length+1);if(d>=lowDate())ps[d]=S.plans[k]}});return ps};
   if(S.bundle.role==="driver"){const ps=by(S.bundle.dir);if(Object.keys(ps).length)applyPlansDriver(ps)}
   else if(S.bundle.role==="admin"){for(const pc of (S.bundle.planCars||[])){if(!pc.dir)continue;const c=S.bundle.cars.find(x=>x.dir===pc.dir);if(!c)continue;const ps=by(pc.dir);for(const d of Object.keys(ps)){if(ps[d].legs&&ps[d].legs.length)c.days[d]=ovDay(ps[d])}}}}
 async function loadPlansAdmin(){
@@ -992,7 +992,7 @@ S.ar={car:"all",rows:[],busy:false};
 async function arLoad(){
   if(S.ar.busy||!S.bundle||S.bundle.role!=="admin")return;S.ar.busy=true;
   try{for(const pc of (S.bundle.planCars||[])){if(!pc.dir)continue;
-      const ds=Object.keys(S.plans).filter(k=>k.indexOf(pc.dir+"|")===0).map(k=>k.slice(pc.dir.length+1)).filter(d=>d<=today()&&d>=START);await histFetch(pc.dir,ds)}}catch(e){}
+      const ds=Object.keys(S.plans).filter(k=>k.indexOf(pc.dir+"|")===0).map(k=>k.slice(pc.dir.length+1)).filter(d=>d<=today()&&d>=lowDate());await histFetch(pc.dir,ds)}}catch(e){}
   S.ar.busy=false;S.ar.rows=akItems();
   try{await ejLoad();for(const k of Object.keys(S.ej.d||{})){const e=S.ej.d[k];if(!S.server[e.dir+"|"+e.date]){await ghList(e.dir,e.date);await fetchNy(e.dir,e.date)}}}catch(e){}
   try{const reds=S.ar.rows.filter(x=>x.ok===false&&!(S.ej.d[x.dir+"|"+x.date+"|"+x.leg.order]));
@@ -1009,11 +1009,11 @@ function renderArk(){
     (vis.length?vis.map(x=>'<tr style="border-top:1px solid var(--line)"><td>'+esc(x.date)+'</td><td>'+esc(x.car)+'</td><td>'+esc(x.leg.order)+'</td><td>'+esc(x.leg.from.name)+' → '+esc(x.leg.to.name)+'</td><td><span class="pill '+(x.leg.load==="tom"?'p-tom':'p-full')+'">'+(x.leg.load==="tom"?'Retur':'Utkörning')+'</span></td><td>'+esc(x.leg.mangd||"")+'</td><td style="font-weight:700;color:'+(x.leg.load==="tom"?'var(--empty)':'var(--full)')+'">'+(x.leg.kg?sp(x.leg.kg):"")+'</td><td>'+(x.ok===true?'<b style="color:#2e9e4f">✓</b>':x.ok===false?'<b style="color:#d03a3a">✗</b>':'<span class="muted">–</span>')+'</td><td>'+(lockGet(x.dir,x.date,x.leg.order)?'<button class="btn link" data-ar="unlock" data-i="'+rows.indexOf(x)+'" title="Lås upp">🔒 Låst</button>':'<button class="btn link" data-ar="lock" data-i="'+rows.indexOf(x)+'">Lås</button>')+'</td><td><button class="btn link" data-ar="open" data-i="'+rows.indexOf(x)+'">Öppna</button></td></tr>').join(""):'<tr><td colspan="10" class="muted" style="padding:10px 0">Inga körda transporter än.</td></tr>')+'</tbody></table></div></div>';
   if(notRun.length)top+='<div class="card" style="margin-top:14px;border-left:4px solid #d03a3a"><b>Ej körda – förarna har markerat med ✗ (sparas separat, räknas inte i summorna). "Lås & dölj" tar bort dem från surfplattorna.</b><div style="overflow:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse;font-size:14px"><tbody>'+notRun.map(x=>'<tr style="border-top:1px solid var(--line)"><td>'+esc(x.date)+'</td><td>'+esc(x.car)+'</td><td>'+esc(x.leg.order)+'</td><td>'+esc(x.leg.from.name)+' → '+esc(x.leg.to.name)+'</td><td>'+(lockGet(x.dir,x.date,x.leg.order)?'<button class="btn link" data-ar="unlock" data-i="'+rows.indexOf(x)+'">🔒 Låst</button>':'<button class="btn small" data-ar="lock" data-i="'+rows.indexOf(x)+'">Lås & dölj</button>')+'</td><td><button class="btn link" data-ar="open" data-i="'+rows.indexOf(x)+'">Öppna</button></td></tr>').join("")+'</tbody></table></div></div>';
   if(removed.length)h+='<div class="card" style="margin-top:14px;border-left:4px solid var(--line)"><b>Borttaget – dolt för förarna (sparas alltid, bara du ser dem)</b><div style="overflow:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse;font-size:14px"><tbody>'+removed.map(x=>'<tr style="border-top:1px solid var(--line)"><td>'+esc(x.date)+'</td><td>'+esc(x.car)+'</td><td>'+esc(x.leg.order)+'</td><td>'+esc(x.leg.from.name)+' → '+esc(x.leg.to.name)+'</td><td><button class="btn link" data-ar="open" data-i="'+rows.indexOf(x)+'">Öppna</button></td><td><button class="btn link" data-ar="unlock" data-i="'+rows.indexOf(x)+'">Återställ till förarna</button></td></tr>').join("")+'</tbody></table></div></div>';
-  {const ej=Object.keys(S.ej.d||{}).map(k=>S.ej.d[k]).filter(e=>e.date>=START).sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:0);
+  {const ej=Object.keys(S.ej.d||{}).map(k=>S.ej.d[k]).filter(e=>e.date>=lowDate()).sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:0);
     top+='<div class="card" style="margin-top:14px;border-left:4px solid #d03a3a"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center"><b>Ej körda – egen fil (sparas alltid, raderas aldrig)</b><button class="btn small" data-ar="ejcsv">Ladda ner filen (CSV)</button></div><p class="muted" style="font-size:14px;margin:6px 0">Allt som någon gång markerats ✗ ligger här med historik, även om det senare ändrats. "Ändrad till ✓" betyder att någon trycket grönt efteråt – kontrollera.</p>'+
       (ej.length?'<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr class="muted" style="text-align:left"><th>Datum</th><th>Bil</th><th>Order</th><th>Från → Till</th><th>Nu</th><th>Låst</th><th>Historik</th></tr></thead><tbody>'+ej.map(e=>{const cur=e.log.length?e.log[e.log.length-1].ok:false;const row=rows.find(x=>x.dir===e.dir&&x.date===e.date&&x.leg.order===e.order),nu=row?row.ok:cur;
         return '<tr style="border-top:1px solid var(--line)"><td>'+esc(e.date)+'</td><td>'+esc(e.car)+'</td><td>'+esc(e.order)+'</td><td>'+esc(e.from)+' → '+esc(e.to)+'</td><td>'+(nu===false?'<b style="color:#d03a3a">✗ Ej körd</b>':'<b style="color:#b26b00">⚠ Ändrad till '+(nu===true?'✓':'–')+'</b>')+'</td><td>'+(lockGet(e.dir,e.date,e.order)?'<button class="btn link" data-ar="ecunlock" data-k="'+esc(e.dir+"|"+e.date+"|"+e.order)+'">🔒 Låst</button>':'<button class="btn link" data-ar="eclock" data-k="'+esc(e.dir+"|"+e.date+"|"+e.order)+'">Lås & dölj</button>')+'</td><td class="muted">'+e.log.map(l=>(l.ok?'✓':'✗')+' '+new Date(l.ts).toLocaleString("sv-SE",{dateStyle:"short",timeStyle:"short"})+' ('+esc(l.by)+')').join(' → ')+'</td></tr>'}).join("")+'</tbody></table></div>':'<p class="muted" style="margin:0">Inga ✗-markeringar än.</p>')+'</div>'}
-  {const nx=notRun0.length+removed.length,ne=Object.keys(S.ej.d||{}).filter(k=>S.ej.d[k].date>=START).length;top=(nx||ne?'<div class="notice warn" style="border:2px solid #d03a3a;margin-top:12px"><b style="color:#d03a3a">✗ Ej körda: '+Math.max(nx,ne)+' leverans(er) markerade av förarna</b> – listas här nedanför.'+(S.ej.err?' <br>⚠ Kunde inte läsa den separata filen ('+esc(S.ej.err)+').':'')+'</div>':'<div class="muted" style="margin-top:12px;font-size:14px">Inga leveranser är markerade ✗ av förarna.'+(S.ej.err?' ⚠ Kunde inte läsa den separata filen ('+esc(S.ej.err)+').':'')+'</div>')+top}
+  {const nx=notRun0.length+removed.length,ne=Object.keys(S.ej.d||{}).filter(k=>S.ej.d[k].date>=lowDate()).length;top=(nx||ne?'<div class="notice warn" style="border:2px solid #d03a3a;margin-top:12px"><b style="color:#d03a3a">✗ Ej körda: '+Math.max(nx,ne)+' leverans(er) markerade av förarna</b> – listas här nedanför.'+(S.ej.err?' <br>⚠ Kunde inte läsa den separata filen ('+esc(S.ej.err)+').':'')+'</div>':'<div class="muted" style="margin-top:12px;font-size:14px">Inga leveranser är markerade ✗ av förarna.'+(S.ej.err?' ⚠ Kunde inte läsa den separata filen ('+esc(S.ej.err)+').':'')+'</div>')+top}
   return h.replace("<!--TOP-->",top)}
 document.addEventListener("click",async e=>{const t=e.target.closest("[data-ar]");if(!t||!S.bundle)return;const a=t.dataset.ar;
   if(a==="car"){S.ar.car=t.dataset.c;render();return}
@@ -2071,7 +2071,7 @@ function renderSum(){
    sec("Körningar med släp (appen)",O.trl.length?tbl(["Dag","Bil","Släp","Körn."],O.trl):'<p class="muted" style="margin:0">Inga.</p>')+
    sec("Rapporterat i appen per dag",tbl(["Datum","Bil","Förare","Släp","Körn.","Lossade","kg"],O.perDag.sort((a,b)=>a[0]<b[0]?1:-1))):"");
 }
-function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v78</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v78 – skicka den här texten till mig.</div>'}}
+function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v79</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v79 – skicka den här texten till mig.</div>'}}
 function renderAdmin(){
   const ds=days(),B=S.bundle;let h='<div class="pagehead"><h2>Översikt</h2><p class="muted">Dagens körningar, status från förarna och aviseringar.</p></div>';
   {const D=S.date||today(),cs=B.cars.filter(c=>c.days[D]);let nL=0,nU=0,nG=0;cs.forEach(c=>{const st=statesFor(c.dir,D);if(st.get("dag|godkand"))nG++;allLegs(c.dir,D,c.days[D].legs.map(l=>Object.assign({},l,{from:{name:l.from},to:{name:l.to}}))).filter(l=>!l.deleted).forEach(l=>{nL++;if(st.get(l.order+"|lossad"))nU++})});
@@ -2340,7 +2340,7 @@ async function akLoad(){
   await akInit();await loadPlansAdmin();
   const t=today();
   for(const pc of (S.bundle.planCars||[])){if(!pc.dir)continue;
-    for(const k of Object.keys(S.plans)){if(k.indexOf(pc.dir+"|")!==0)continue;const d=k.slice(pc.dir.length+1);if(d>t||d<START||store.get("akdone:"+k))continue;
+    for(const k of Object.keys(S.plans)){if(k.indexOf(pc.dir+"|")!==0)continue;const d=k.slice(pc.dir.length+1);if(d>t||d<lowDate()||store.get("akdone:"+k))continue;
       if(!S.plans[k]||!S.plans[k].legs||!S.plans[k].legs.length)continue;
       await ghList(pc.dir,d);await fetchNy(pc.dir,d)}}
   if(S.ak.dir&&S.ak.perm==="granted")await akSync(false);else S.ak.todo=akItems().length}
