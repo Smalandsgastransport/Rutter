@@ -1043,20 +1043,21 @@ async function loadFlak(){
   try{const st=S.bundle.status,r=await fetch(GH+st.repo+"/contents/"+FKP+"?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});
     if(r.status===404){S.fk.loc={};S.fk.sha=null;S.fk.ok=true;S.fk.st={ok:true,ts:Date.now(),empty:true};return true}
     if(!r.ok){let det="";try{det=((await r.json()).message||"").slice(0,160)}catch(e){}S.fk.st={ok:false,msg:"Servern svarade "+r.status+" vid hämtning"+(det?" ("+det+")":"")};throw 0}
-    const j=await r.json(),c=j.content.replace(/\n/g,"");S.fk.sha=j.sha;S.fk.loc=await openPlan(unb64(c));S.fk.ok=true;store.set("flak",c);S.fk.st={ok:true,ts:Date.now()};return true}
-  catch(e){if(!S.fk.st||S.fk.st.ok)S.fk.st={ok:false,msg:"Kunde inte läsa listan ("+((e&&e.name)||"nätverk")+")"};const c=store.get("flak");if(c&&!S.fk.ok){try{S.fk.loc=await openPlan(unb64(c))}catch(x){}}return false}}
+    const j=await r.json(),c=j.content.replace(/\n/g,"");S.fk.sha=j.sha;S.fk.loc=await openPlan(unb64(c));S.fk.clear=S.fk.loc._clear||0;delete S.fk.loc._clear;S.fk.ok=true;store.set("flak",c);S.fk.st={ok:true,ts:Date.now()};return true}
+  catch(e){if(!S.fk.st||S.fk.st.ok)S.fk.st={ok:false,msg:"Kunde inte läsa listan ("+((e&&e.name)||"nätverk")+")"};const c=store.get("flak");if(c&&!S.fk.ok){try{S.fk.loc=await openPlan(unb64(c));S.fk.clear=S.fk.loc._clear||0;delete S.fk.loc._clear}catch(x){}}return false}}
 async function saveFlak(mut){
   for(let i=0;i<4;i++){
     if(!(await loadFlak()))throw new Error("Kunde inte läsa listan först: "+((S.fk.st&&S.fk.st.msg)||""));
     mut(S.fk.loc);
-    const st=S.bundle.status,body={message:pm("all"),content:b64(await sealPlan(S.fk.loc))};if(S.fk.sha)body.sha=S.fk.sha;
+    const st=S.bundle.status,body={message:pm("all"),content:b64(await sealPlan(Object.assign({_clear:S.fk.clear||0},S.fk.loc)))};if(S.fk.sha)body.sha=S.fk.sha;
     const r=await fetch(GH+st.repo+"/contents/"+FKP,{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify(body)});
-    if(r.ok){S.fk.sha=(await r.json()).content.sha;S.fk.st={ok:true,ts:Date.now()};try{store.set("flak",b64(await sealPlan(S.fk.loc)))}catch(e){}return}
+    if(r.ok){S.fk.sha=(await r.json()).content.sha;S.fk.st={ok:true,ts:Date.now()};try{store.set("flak",b64(await sealPlan(Object.assign({_clear:S.fk.clear||0},S.fk.loc))))}catch(e){}return}
     let det="";try{det=((await r.json()).message||"").slice(0,160)}catch(e){}
     if(r.status!==409&&r.status!==422)throw new Error("Servern svarade "+r.status+" vid sparande"+(det?" ("+det+")":""));
     S.fk.last409=r.status+" "+det}
   throw new Error("Konflikt "+(S.fk.last409||"")+" – försök igen")}
 const fkQ=()=>{try{return JSON.parse(store.get("fkq")||"[]")}catch(e){return []}};
+async function flakClear(){localStorage.removeItem("fkq");S.fk.err="";await saveFlak(loc=>{Object.keys(loc).forEach(k=>delete loc[k]);S.fk.clear=Date.now()})}
 async function flakMove(items){
   if(items&&items.length){const q=fkQ().concat(items);store.set("fkq",JSON.stringify(q));items.forEach(x=>{if(x.v)S.fk.loc[x.nr]=x.v;else delete S.fk.loc[x.nr]})}
   await flushFlak()}
@@ -1074,7 +1075,7 @@ function renderFlak(){
   const fst=S.fk.st,stl=fst?(fst.ok?'<span class="muted" style="font-size:13px">Listan hämtad '+esc(hhmm(new Date(fst.ts).toISOString()))+(fst.empty?' (tom)':'')+'</span>':'<span style="color:#d03a3a;font-size:13px">⚠ '+esc(fst.msg)+'</span>'):'';
   let h='<div class="pagehead"><h2>Flak</h2><p class="muted">Var varje flak står just nu. Uppdateras av förarna när de lastar och lossar. Gehab-flak ('+GEHAB.join(", ")+') får bara åka på bilen, inte på släpet. '+stl+(fkQ().length?' <b style="color:#d03a3a">'+fkQ().length+' ändringar väntar på att sparas.'+(S.fk.err?' Senaste fel: '+esc(S.fk.err):'')+'</b> <button class="btn small" data-fk="retry">Försök spara igen</button>':'')+'</p></div>';
   const sel='style="font:inherit;font-size:16px;padding:8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg)"';
-  h+='<div class="card" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end"><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Flaknummer (ett eller flera, t.ex. 158, 145)<input id="fkNr" value="'+esc(V.nr)+'" '+sel+'></label><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Står på<select id="fkTo" '+sel+'>'+plOpts(V.to)+'</select></label><button class="btn go" data-fk="set">Flytta hit</button><button class="btn" data-fk="del">Ta bort flak ur listan</button></div>'+(V.msg?'<div class="notice">'+esc(V.msg)+'</div>':'');
+  h+='<div class="card" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end"><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Flaknummer (ett eller flera, t.ex. 158, 145)<input id="fkNr" value="'+esc(V.nr)+'" '+sel+'></label><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Står på<select id="fkTo" '+sel+'>'+plOpts(V.to)+'</select></label><button class="btn go" data-fk="set">Flytta hit</button><button class="btn" data-fk="del">Ta bort flak ur listan</button><button class="btn link" data-fk="clear" style="color:#d03a3a">'+(S.fkArm?'Tryck igen för att RENSA HELA LISTAN':'Rensa hela listan')+'</button></div>'+(V.msg?'<div class="notice">'+esc(V.msg)+'</div>':'');
   const gl=GEHAB.filter(n=>true);
   h+='<div class="card" style="margin-top:12px"><b>Gehab-flak</b><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">'+gl.map(n=>'<span class="pill p-type">'+n+': '+esc(flakWhere(n)||"okänd plats")+'</span>').join("")+'</div></div>';
   const groups={};all.forEach(n=>{const v=loc[n]||{},k=v.p||(v.car?"På bil: "+v.car:"Okänd");(groups[k]=groups[k]||[]).push(n)});
@@ -1083,7 +1084,8 @@ function renderFlak(){
   return h}
 document.addEventListener("click",async e=>{const t=e.target.closest("[data-fk]");if(!t||!S.bundle||S.bundle.role!=="admin")return;
   if(t.dataset.fk==="retry"){S.fk.err="";await flushFlak();S.fkv.msg=S.fk.err?"⚠ Fortfarande inte sparat: "+S.fk.err:"✓ Sparat på servern.";render();return}
-  const V=S.fkv,nrs=String((document.getElementById("fkNr")||{}).value||"").split(/[^0-9A-Za-z]+/).map(flNr).filter(Boolean),to=(document.getElementById("fkTo")||{}).value||"";V.nr=nrs.join(", ");V.to=to;
+  if(t.dataset.fk==="clear"){if(!S.fkArm){S.fkArm=true;render();return}S.fkArm=false;try{await flakClear();S.fkv.msg="✓ Hela flaklistan är rensad och sparad på servern. Gamla körningar läggs inte tillbaka."}catch(err){S.fkv.msg="⚠ Kunde inte rensa: "+err.message}render();return}
+  S.fkArm=false;const V=S.fkv,nrs=String((document.getElementById("fkNr")||{}).value||"").split(/[^0-9A-Za-z]+/).map(flNr).filter(Boolean),to=(document.getElementById("fkTo")||{}).value||"";V.nr=nrs.join(", ");V.to=to;
   const pl=(S.bundle.places||[]).find(p=>p.id===to);
   if(!nrs.length){V.msg="Skriv minst ett flaknummer.";render();return}
   if(t.dataset.fk==="set"){if(!pl){V.msg="Välj plats.";render();return}S.fk.err="";await flakMove(nrs.map(n=>({nr:n,v:{p:pl.name,ts:Date.now(),by:"kontoret"}})));V.msg=S.fk.err?"⚠ INTE SPARAT på servern: "+S.fk.err+". Försök igen (flaken ligger i kö på den här datorn).":"✓ Sparat på servern: "+nrs.join(", ")+" står på "+pl.name+". Förarna ser det efter nästa uppdatering.";V.nr=""}
@@ -1269,7 +1271,7 @@ function flakDerive(){const out={};
     Object.keys(S.plans).forEach(k=>{if(k.indexOf(pc.dir+"|")!==0)return;const d=k.slice(pc.dir.length+1);if(d<START)return;const p=S.plans[k];if(!p||!p.legs||!p.legs.length)return;
       const st=statesFor(pc.dir,d);
       allLegs(pc.dir,d,planToRoute(p).legs).forEach(l=>{if(l.deleted)return;const e=st.get(l.order+"|lastad"),f=lastFlak(e);if(!f)return;const U=st.get(l.order+"|lossad");
-        const ts=U?U.ts:e.ts,v=U?{p:l.to.name,ts,by:pc.name||"bil"}:{car:pc.name||"bil",from:l.from.name,ts};
+        const ts=U?U.ts:e.ts;if(ts<=(S.fk.clear||0))return;const v=U?{p:l.to.name,ts,by:pc.name||"bil"}:{car:pc.name||"bil",from:l.from.name,ts};
         f.forEach(x=>{const nr=flNr(x.nr);if(nr&&(!out[nr]||out[nr].ts<ts))out[nr]=v})})})});
   return out}
 async function flakSyncFromEvents(){
