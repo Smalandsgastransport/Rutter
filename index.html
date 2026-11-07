@@ -1168,15 +1168,17 @@ document.addEventListener("click",async e=>{const t=e.target.closest("[data-ar]"
 const GEHAB=["62","63","64","65","66"],flNr=v=>String(v||"").trim().toUpperCase().replace(/^FLAK\s*/,""),isGehab=v=>GEHAB.indexOf(flNr(v))>=0;
 S.fk={loc:{},sha:null,ok:false};S.fkv={q:"",nr:"",to:"",msg:""};
 const FKP="plan/_flak/all.json";
+const fkPend=()=>{try{JSON.parse(localStorage.getItem("fkq")||"[]").forEach(x=>{if(x.v)S.fk.loc[x.nr]=x.v;else delete S.fk.loc[x.nr]})}catch(e){}};
+const fkSleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function loadFlak(){
   if(!S.bundle||!S.bundle.planKey||!S.bundle.status){S.fk.st={ok:false,msg:"Appen saknar åtkomst till flaklistan."};return false}
   try{const st=S.bundle.status,r=await fetch(GH+st.repo+"/contents/"+FKP+"?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});
-    if(r.status===404){S.fk.loc={};S.fk.sha=null;S.fk.ok=true;S.fk.st={ok:true,ts:Date.now(),empty:true};return true}
+    if(r.status===404){S.fk.loc={};S.fk.sha=null;S.fk.ok=true;S.fk.st={ok:true,ts:Date.now(),empty:true};fkPend();return true}
     if(!r.ok){let det="";try{det=((await r.json()).message||"").slice(0,160)}catch(e){}S.fk.st={ok:false,msg:"Servern svarade "+r.status+" vid hämtning"+(det?" ("+det+")":"")};throw 0}
     const j=await r.json(),c=j.content.replace(/\n/g,"");S.fk.sha=j.sha;
     try{S.fk.loc=await openPlan(unb64(c));S.fk.clear=S.fk.loc._clear||0;delete S.fk.loc._clear;store.set("flak",c)}
-    catch(de){if(S.bundle.role!=="admin")throw de;/* filen går inte att läsa (skadad/annan nyckel): börja om med en tom lista – nästa sparning ersätter den */S.fk.loc={};S.fk.clear=Date.now();S.fk.healed=true;store.set("flak",null)}
-    S.fk.ok=true;S.fk.st={ok:true,ts:Date.now()};return true}
+    catch(de){if(S.bundle.role!=="admin")throw de;/* filen går inte att läsa (skadad/annan nyckel): börja om med en tom lista – nästa sparning ersätter den */S.fk.loc={};S.fk.clear=S.fk.clear||0;S.fk.healed=true;store.set("flak",null)}
+    fkPend();S.fk.ok=true;S.fk.st={ok:true,ts:Date.now(),n:Object.keys(S.fk.loc).length};return true}
   catch(e){if(!S.fk.st||S.fk.st.ok)S.fk.st={ok:false,msg:"Kunde inte läsa listan ("+((e&&e.name)||"nätverk")+")"};const c=store.get("flak");if(c&&!S.fk.ok){try{S.fk.loc=await openPlan(unb64(c));S.fk.clear=S.fk.loc._clear||0;delete S.fk.loc._clear}catch(x){}}return false}}
 async function saveFlak(mut){
   for(let i=0;i<4;i++){
@@ -1187,17 +1189,21 @@ async function saveFlak(mut){
     if(r.ok){S.fk.sha=(await r.json()).content.sha;S.fk.st={ok:true,ts:Date.now()};try{store.set("flak",b64(await sealPlan(Object.assign({_clear:S.fk.clear||0},S.fk.loc))))}catch(e){}return}
     let det="";try{det=((await r.json()).message||"").slice(0,160)}catch(e){}
     if(r.status!==409&&r.status!==422)throw new Error("Servern svarade "+r.status+" vid sparande"+(det?" ("+det+")":""));
-    S.fk.last409=r.status+" "+det}
+    S.fk.last409=r.status+" "+det;await fkSleep(500*(i+1))}
   throw new Error("Konflikt "+(S.fk.last409||"")+" – försök igen")}
 const fkQ=()=>{try{return JSON.parse(store.get("fkq")||"[]")}catch(e){return []}};
 async function flakClear(){localStorage.removeItem("fkq");S.fk.err="";await saveFlak(loc=>{Object.keys(loc).forEach(k=>delete loc[k]);S.fk.clear=Date.now()})}
 async function flakMove(items){
   if(items&&items.length){const q=fkQ().concat(items);store.set("fkq",JSON.stringify(q));items.forEach(x=>{if(x.v)S.fk.loc[x.nr]=x.v;else delete S.fk.loc[x.nr]})}
   await flushFlak()}
-async function flushFlak(){
-  if(S.fk.busy)return;const q=fkQ();if(!q.length)return;S.fk.busy=true;
-  try{await saveFlak(loc=>q.forEach(x=>{if(x.v)loc[x.nr]=x.v;else delete loc[x.nr]}));store.set("fkq",JSON.stringify(fkQ().slice(q.length)));S.fk.err=""}catch(e){S.fk.err=(e&&e.message)||"okänt fel"}
-  finally{S.fk.busy=false}}
+function flushFlak(){
+  if(S.fk.p)return S.fk.p;
+  const run=async()=>{try{
+    for(let g=0;g<20;g++){const q=fkQ();if(!q.length)break;
+      await saveFlak(loc=>q.forEach(x=>{if(x.v)loc[x.nr]=x.v;else delete loc[x.nr]}));
+      store.set("fkq",JSON.stringify(fkQ().slice(q.length)));S.fk.err=""}
+  }catch(e){S.fk.err=(e&&e.message)||"okänt fel"}};
+  const p=run().then(()=>{if(S.fk.p===p)S.fk.p=null});S.fk.p=p;return p}
 const SLOTS={"Påfyllning Alvesta":["Plats 1","Plats 2","Plats 3","Plats 4","Plats 5","Plats 6","Plats 7","Plats 8","Trailer 5"],
   "Påfyllning Målilla":["Målilla 1","Målilla 2","Farmen (Hagelsrum) 1","Farmen (Hagelsrum) 2","Farmen (Hagelsrum) 3"],"Påfyllning Sävsjö":["Plats 1","Plats 2"],"Påfyllning Jönköping":["Plats 1","Plats 2"]};
 const slotOf=n=>((S.fk.loc||{})[n]||{}).slot||"";
@@ -2264,7 +2270,7 @@ function renderSum(){
    sec("Körningar med släp (appen)",O.trl.length?tbl(["Dag","Bil","Släp","Körn."],O.trl):'<p class="muted" style="margin:0">Inga.</p>')+
    sec("Rapporterat i appen per dag",tbl(["Datum","Bil","Förare","Släp","Körn.","Lossade","kg"],O.perDag.sort((a,b)=>a[0]<b[0]?1:-1))):"");
 }
-function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v91</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v91 – skicka den här texten till mig.</div>'}}
+function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v92</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v92 – skicka den här texten till mig.</div>'}}
 function renderAdmin(){
   const ds=days(),B=S.bundle;let h='<div class="pagehead"><h2>Översikt</h2><p class="muted">Dagens körningar, status från förarna och aviseringar.</p></div>';
   {const D=S.date||today(),cs=B.cars.filter(c=>c.days[D]);let nL=0,nU=0,nG=0;cs.forEach(c=>{const st=statesFor(c.dir,D);if(st.get("dag|godkand"))nG++;allLegs(c.dir,D,c.days[D].legs.map(l=>Object.assign({},l,{from:{name:l.from},to:{name:l.to}}))).filter(l=>!l.deleted).forEach(l=>{nL++;if(st.get(l.order+"|lossad"))nU++})});
