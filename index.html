@@ -1173,26 +1173,33 @@ const fkSleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function loadFlak(){
   if(!S.bundle||!S.bundle.planKey||!S.bundle.status){S.fk.st={ok:false,msg:"Appen saknar åtkomst till flaklistan."};return false}
   try{const st=S.bundle.status,r=await fetch(GH+st.repo+"/contents/"+FKP+"?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});
-    if(r.status===404){S.fk.loc={};S.fk.sha=null;S.fk.ok=true;S.fk.st={ok:true,ts:Date.now(),empty:true};fkPend();return true}
+    if(r.status===404){S.fk.loc={};S.fk.rawN=0;S.fk.sha=null;S.fk.ok=true;S.fk.st={ok:true,ts:Date.now(),empty:true};fkPend();return true}
     if(!r.ok){let det="";try{det=((await r.json()).message||"").slice(0,160)}catch(e){}S.fk.st={ok:false,msg:"Servern svarade "+r.status+" vid hämtning"+(det?" ("+det+")":"")};throw 0}
     const j=await r.json(),c=j.content.replace(/\n/g,"");S.fk.sha=j.sha;
-    try{S.fk.loc=await openPlan(unb64(c));S.fk.clear=S.fk.loc._clear||0;delete S.fk.loc._clear;store.set("flak",c)}
-    catch(de){if(S.bundle.role!=="admin")throw de;/* filen går inte att läsa (skadad/annan nyckel): börja om med en tom lista – nästa sparning ersätter den */S.fk.loc={};S.fk.clear=S.fk.clear||0;S.fk.healed=true;store.set("flak",null)}
-    fkPend();S.fk.ok=true;S.fk.st={ok:true,ts:Date.now(),n:Object.keys(S.fk.loc).length};return true}
+    try{S.fk.loc=await openPlan(unb64(c));S.fk.clear=S.fk.loc._clear||0;delete S.fk.loc._clear;store.set("flak",c);S.fk.rawN=Object.keys(S.fk.loc).length;if(!S.fk.good||Object.keys(S.fk.loc).length>=Object.keys(S.fk.good).length)S.fk.good=JSON.parse(JSON.stringify(S.fk.loc))}
+    catch(de){if(S.bundle.role!=="admin")throw de;
+      /* filen går inte att läsa: rensa ALDRIG tyst. Använd senast kända lista om den finns, annars stanna med fel (tomt bara efter uttryckligt "Rensa") */
+      if(S.fk.good){S.fk.loc=JSON.parse(JSON.stringify(S.fk.good));S.fk.healed=true}
+      else if(S.fk.force){S.fk.loc={};S.fk.healed=true}
+      else{S.fk.st={ok:false,msg:"Servern har en flaklista som den här enheten inte kan läsa ("+((de&&de.name)||"fel")+"). Inget har ändrats."};throw 0}}
+    fkPend();S.fk.ok=true;S.fk.st={ok:true,ts:Date.now(),n:Object.keys(S.fk.loc).length,sha:(S.fk.sha||"").slice(0,6)};return true}
   catch(e){if(!S.fk.st||S.fk.st.ok)S.fk.st={ok:false,msg:"Kunde inte läsa listan ("+((e&&e.name)||"nätverk")+")"};const c=store.get("flak");if(c&&!S.fk.ok){try{S.fk.loc=await openPlan(unb64(c));S.fk.clear=S.fk.loc._clear||0;delete S.fk.loc._clear}catch(x){}}return false}}
-async function saveFlak(mut){
+async function saveFlak(mut,opt){opt=opt||{};
   for(let i=0;i<4;i++){
     if(!(await loadFlak()))throw new Error("Kunde inte läsa listan först: "+((S.fk.st&&S.fk.st.msg)||""));
+    /* skyddsstopp: läsningen får inte ha färre flak än vi senast såg (gammal data från servern), utom vid avsiktlig borttagning */
+    const gn=S.fk.good&&!opt.shrink?Object.keys(S.fk.good).length:0,hn=S.fk.rawN!=null?S.fk.rawN:Object.keys(S.fk.loc).length;
+    if(gn&&hn<gn-(opt.rem||0)){S.fk.last409="läsningen gav "+hn+" flak men senast sågs "+gn;if(i===3){S.fk.good=null;throw new Error("Skyddsstopp: servern visar "+hn+" flak men den här enheten såg nyss "+gn+". Inget sparades. Tryck Försök spara igen om det stämmer.")}await fkSleep(700*(i+1));continue}
     mut(S.fk.loc);
     const st=S.bundle.status,body={message:pm("all"),content:b64(await sealPlan(Object.assign({_clear:S.fk.clear||0},S.fk.loc)))};if(S.fk.sha)body.sha=S.fk.sha;
     const r=await fetch(GH+st.repo+"/contents/"+FKP,{method:"PUT",headers:ghHeaders(st,true),body:JSON.stringify(body)});
-    if(r.ok){S.fk.sha=(await r.json()).content.sha;S.fk.st={ok:true,ts:Date.now()};try{store.set("flak",b64(await sealPlan(Object.assign({_clear:S.fk.clear||0},S.fk.loc))))}catch(e){}return}
+    if(r.ok){S.fk.sha=(await r.json()).content.sha;S.fk.st={ok:true,ts:Date.now(),n:Object.keys(S.fk.loc).length,sha:(S.fk.sha||"").slice(0,6)};S.fk.good=JSON.parse(JSON.stringify(S.fk.loc));try{store.set("flak",b64(await sealPlan(Object.assign({_clear:S.fk.clear||0},S.fk.loc))))}catch(e){}return}
     let det="";try{det=((await r.json()).message||"").slice(0,160)}catch(e){}
     if(r.status!==409&&r.status!==422)throw new Error("Servern svarade "+r.status+" vid sparande"+(det?" ("+det+")":""));
     S.fk.last409=r.status+" "+det;await fkSleep(500*(i+1))}
   throw new Error("Konflikt "+(S.fk.last409||"")+" – försök igen")}
 const fkQ=()=>{try{return JSON.parse(store.get("fkq")||"[]")}catch(e){return []}};
-async function flakClear(){localStorage.removeItem("fkq");S.fk.err="";await saveFlak(loc=>{Object.keys(loc).forEach(k=>delete loc[k]);S.fk.clear=Date.now()})}
+async function flakClear(){localStorage.removeItem("fkq");S.fk.err="";S.fk.force=true;try{await saveFlak(loc=>{Object.keys(loc).forEach(k=>delete loc[k]);S.fk.clear=Date.now()},{shrink:true})}finally{S.fk.force=false}}
 async function flakMove(items){
   if(items&&items.length){const q=fkQ().concat(items);store.set("fkq",JSON.stringify(q));items.forEach(x=>{if(x.v)S.fk.loc[x.nr]=x.v;else delete S.fk.loc[x.nr]})}
   await flushFlak()}
@@ -1200,7 +1207,7 @@ function flushFlak(){
   if(S.fk.p)return S.fk.p;
   const run=async()=>{try{
     for(let g=0;g<20;g++){const q=fkQ();if(!q.length)break;
-      await saveFlak(loc=>q.forEach(x=>{if(x.v)loc[x.nr]=x.v;else delete loc[x.nr]}));
+      await saveFlak(loc=>q.forEach(x=>{if(x.v)loc[x.nr]=x.v;else delete loc[x.nr]}),{rem:q.filter(x=>!x.v).length});
       store.set("fkq",JSON.stringify(fkQ().slice(q.length)));S.fk.err=""}
   }catch(e){S.fk.err=(e&&e.message)||"okänt fel"}};
   const p=run().then(()=>{if(S.fk.p===p)S.fk.p=null});S.fk.p=p;return p}
@@ -1255,7 +1262,7 @@ function flakChips(place){const l=flakAt(place);
 function gehabWarn(nrs){const g=nrs.filter(isGehab);if(!g.length)return "";return (g.length>1?'⚠ Två Gehab-flak ('+g.join(", ")+') får inte åka samtidigt. ':'')+'Gehab-flak ('+g.join(", ")+') får bara stå på bilen, aldrig på släpet.'}
 function renderFlak(){
   const B=S.bundle,V=S.fkv,places=(B.places||[]),loc=S.fk.loc||{},all=Object.keys(loc);
-  const fst=S.fk.st,stl=fst?(fst.ok?'<span class="muted" style="font-size:13px">Listan hämtad '+esc(hhmm(new Date(fst.ts).toISOString()))+(fst.empty?' (tom)':'')+'</span>':'<span style="color:#d03a3a;font-size:13px">⚠ '+esc(fst.msg)+'</span>'):'';
+  const fst=S.fk.st,stl=fst?(fst.ok?'<span class="muted" style="font-size:13px">Listan hämtad '+esc(hhmm(new Date(fst.ts).toISOString()))+(fst.empty?' (tom)':'')+(fst.n!=null?' · '+fst.n+' flak · v'+esc(fst.sha||""):'')+'</span>':'<span style="color:#d03a3a;font-size:13px">⚠ '+esc(fst.msg)+'</span>'):'';
   let h='<div class="pagehead"><h2>Flak</h2><p class="muted">Var varje flak står just nu. Uppdateras av förarna när de lastar och lossar. Gehab-flak ('+GEHAB.join(", ")+') får bara åka på bilen, inte på släpet. '+stl+(fkQ().length?' <b style="color:#d03a3a">'+fkQ().length+' ändringar väntar på att sparas.'+(S.fk.err?' Senaste fel: '+esc(S.fk.err):'')+'</b> <button class="btn small" data-fk="retry">Försök spara igen</button>':'')+'</p></div>';
   const sel='style="font:inherit;font-size:16px;padding:8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg)"';
   h+='<div class="card" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end"><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Flaknummer (ett eller flera, t.ex. 158, 145)<input id="fkNr" value="'+esc(V.nr)+'" '+sel+'></label><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Står på<select id="fkTo" '+sel+'>'+plOpts(V.to)+'</select></label><label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px">Flakplats<select id="fkSlot" '+sel+'><option value="">–</option>'+Object.keys(SLOTS).map(pl=>'<optgroup label="'+esc(pl)+'">'+SLOTS[pl].map(k=>'<option value="'+esc(pl+"|"+k)+'">'+esc(k)+'</option>').join("")+'</optgroup>').join("")+'</select></label><button class="btn go" data-fk="set">Flytta hit</button><button class="btn" data-fk="del">Ta bort flak ur listan</button><button class="btn link" data-fk="clear" style="color:#d03a3a">'+(S.fkArm?'Tryck igen för att RENSA HELA LISTAN':'Rensa hela listan')+'</button></div>'+(V.msg?'<div class="notice">'+esc(V.msg)+'</div>':'');
@@ -2270,7 +2277,7 @@ function renderSum(){
    sec("Körningar med släp (appen)",O.trl.length?tbl(["Dag","Bil","Släp","Körn."],O.trl):'<p class="muted" style="margin:0">Inga.</p>')+
    sec("Rapporterat i appen per dag",tbl(["Datum","Bil","Förare","Släp","Körn.","Lossade","kg"],O.perDag.sort((a,b)=>a[0]<b[0]?1:-1))):"");
 }
-function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v92</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v92 – skicka den här texten till mig.</div>'}}
+function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v93</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v93 – skicka den här texten till mig.</div>'}}
 function renderAdmin(){
   const ds=days(),B=S.bundle;let h='<div class="pagehead"><h2>Översikt</h2><p class="muted">Dagens körningar, status från förarna och aviseringar.</p></div>';
   {const D=S.date||today(),cs=B.cars.filter(c=>c.days[D]);let nL=0,nU=0,nG=0;cs.forEach(c=>{const st=statesFor(c.dir,D);if(st.get("dag|godkand"))nG++;allLegs(c.dir,D,c.days[D].legs.map(l=>Object.assign({},l,{from:{name:l.from},to:{name:l.to}}))).filter(l=>!l.deleted).forEach(l=>{nL++;if(st.get(l.order+"|lossad"))nU++})});
