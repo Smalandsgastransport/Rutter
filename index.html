@@ -616,7 +616,7 @@ function nyEvents(dir,date){
   return out.sort((a,b)=>a.ts-b.ts);
 }
 async function fetchNy(dir,date){const st=S.bundle.status;if(!st)return;
-  for(const n of (S.server[dir+"|"+date]||[])){const p=parseName(n);if(!p||(p.type!=="ny"&&p.type!=="lastad"&&p.type!=="notis"&&p.type!=="notislast"&&p.type!=="andring"&&p.type!=="paus"&&p.type!=="pausslut"&&p.type!=="kord"&&p.type!=="dagslut"&&p.type!=="dagstart"&&p.type!=="overfor"&&p.type!=="las"&&p.type!=="forare")||S.nyData[n])continue;
+  for(const n of (S.server[dir+"|"+date]||[])){const p=parseName(n);if(!p||(p.type!=="ny"&&p.type!=="lastad"&&p.type!=="notis"&&p.type!=="notislast"&&p.type!=="andring"&&p.type!=="paus"&&p.type!=="pausslut"&&p.type!=="kord"&&p.type!=="dagslut"&&p.type!=="dagstart"&&p.type!=="overfor"&&p.type!=="las"&&p.type!=="lasbegar"&&p.type!=="forare")||S.nyData[n])continue;
     try{const r=await fetch(GH+st.repo+"/contents/status/"+date+"/"+dir+"/"+n,{headers:ghHeaders(st),cache:"no-store"});if(!r.ok)continue;const j=await r.json();S.nyData[n]=JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g,"")))))}catch(e){}}}
 /* ---------- Flaknummer vid Lastad ---------- */
 function kgGas(bar,L){const T=288.15,R=8.314462,Tc=190.564,Pc=45.99e5,w=0.0115,M=16.043e-3,P=(bar+1.01325)*1e5;
@@ -1034,7 +1034,9 @@ function pdfOverlay(blob,name,extra){if(pdfFull(blob))return;
   document.body.appendChild(o)}
 document.addEventListener("click",e=>{const t=e.target.closest("[data-pv]");if(t){const o=document.getElementById("pdfov");if(o){o.querySelectorAll("[data-u]").forEach(x=>URL.revokeObjectURL(x.dataset.u));o.remove()}}});
 const histOld=d=>d<=iso(new Date(Date.now()-2*864e5));
-async function histFetch(dir,dates){for(const d of dates){const k="hist:"+dir+"|"+d;if(store.get(k)&&d<iso(new Date(Date.now()-14*864e5)))continue;await ghList(dir,d);await fetchNy(dir,d);if(d<iso(new Date(Date.now()-14*864e5))&&(S.server[dir+"|"+d]||[]).length)store.set(k,"1")}}
+async function histFetch(dir,dates){const todo=dates.filter(d=>!(store.get("hist:"+dir+"|"+d)&&d<iso(new Date(Date.now()-14*864e5))));
+  const one=async d=>{const k="hist:"+dir+"|"+d;await ghList(dir,d);await fetchNy(dir,d);if(d<iso(new Date(Date.now()-14*864e5))&&(S.server[dir+"|"+d]||[]).length)store.set(k,"1")};
+  for(let i=0;i<todo.length;i+=6)await Promise.all(todo.slice(i,i+6).map(one))}
 /* förare: eget arkiv, sparas på enheten */
 const dkIdx=()=>{try{return JSON.parse(store.get("dkarch:"+S.bundle.dir)||"{}")}catch(e){return {}}};
 async function dkHist(){
@@ -1105,13 +1107,22 @@ async function dkArch(){
   const kg=good.reduce((a,k)=>a+(idx[k].kg||0),0),days=new Set(good.map(k=>idx[k].date)).size;
   const row=(k)=>{const x=idx[k],v=ok(k),lk=lockGet(dir,x.date,x.order);
     return '<div class="card dkr" data-q="'+esc((x.date+" "+x.from+" "+x.to+" "+x.order).toLowerCase())+'" style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0;padding:10px 12px"><button data-dk="ashow" data-k="'+esc(k)+'" style="all:unset;cursor:pointer;flex:1;min-width:0"><b>'+esc(x.from)+' → '+esc(x.to)+'</b><br><span class="muted" style="font-size:13.5px">'+esc(x.order)+(x.mangd?' · '+esc(x.mangd):'')+' · Visa ›</span></button>'+
-      (lk?'<span class="pill '+(v===false?'p-warn':'p-full')+'" style="font-size:16px;padding:10px 14px">'+(v===false?'✗ Ej körd':v===true?'✓ Körd':'')+' · 🔒 Låst</span>':'<span style="display:flex;gap:8px"><button data-dk="kord" data-k="'+esc(k)+'" data-v="1" aria-label="Körd" style="font-size:26px;width:52px;height:52px;border-radius:8px;border:2px solid #2e9e4f;background:'+(v===true?'#2e9e4f':'transparent')+';color:'+(v===true?'#fff':'#2e9e4f')+'">✓</button><button data-dk="kord" data-k="'+esc(k)+'" data-v="0" aria-label="Ej körd" style="font-size:26px;width:52px;height:52px;border-radius:8px;border:2px solid #d03a3a;background:'+(v===false?'#d03a3a':'transparent')+';color:'+(v===false?'#fff':'#d03a3a')+'">✗</button></span>')+delCtl(k,x)+'</div>'};
+      (lk?'<span style="display:flex;flex-direction:column;gap:6px;align-items:flex-end"><span class="pill '+(v===false?'p-warn':'p-full')+'" style="font-size:16px;padding:10px 14px">'+(v===false?'✗ Ej körd':v===true?'✓ Körd':'')+' · 🔒 Låst av kontoret</span>'+(lasReq(dir,x)?'<span class="muted" style="font-size:13px">Förfrågan om ändring skickad</span>':'<button class="btn small" data-dk="lasbegar" data-k="'+esc(k)+'">Begär ändring</button>')+'</span>':'<span style="display:flex;gap:8px"><button data-dk="kord" data-k="'+esc(k)+'" data-v="1" aria-label="Körd" style="font-size:26px;width:52px;height:52px;border-radius:8px;border:2px solid #2e9e4f;background:'+(v===true?'#2e9e4f':'transparent')+';color:'+(v===true?'#fff':'#2e9e4f')+'">✓</button><button data-dk="kord" data-k="'+esc(k)+'" data-v="0" aria-label="Ej körd" style="font-size:26px;width:52px;height:52px;border-radius:8px;border:2px solid #d03a3a;background:'+(v===false?'#d03a3a':'transparent')+';color:'+(v===false?'#fff':'#d03a3a')+'">✗</button></span>')+delCtl(k,x)+'</div>'};
   let last="";
   o.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:19px">Mina körda deklarationer</b><button class="btn" data-dk="close">Stäng</button></div><div class="muted" style="font-size:14px">'+good.length+' transporter · '+days+' dagar'+(kg?' · '+sp(kg)+' kg gas':'')+' · Tryck ✓ om du kört den, ✗ om den inte stämmer / inte kördes.</div><input id="dkq" placeholder="Sök på datum, plats eller order…" style="font:inherit;font-size:16px;padding:10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg)"><div id="dkl" style="display:flex;flex-direction:column;gap:8px">'+
     (good.length?good.map(k=>{const x=idx[k];let h="";if(x.date!==last){last=x.date;h='<div class="muted dkd" style="font-weight:600;margin-top:8px">'+esc(dayLabel(x.date))+'</div>'}return h+row(k)}).join(""):'<div class="card muted">Inga körda transporter sparade än.</div>')+
     (bad.length?'<div class="muted" style="font-weight:600;margin-top:14px">Ej körda – sparas separat (raderas aldrig)</div>'+bad.map(row).join(""):'')+'</div>';
-  document.body.appendChild(o)}
+  document.body.appendChild(o);dkLockSync()}
+function lasReq(dir,x){const st=statesFor(dir,x.date),rq=st.get(x.order+"|lasbegar"),ls=st.get(x.order+"|las");return !!rq&&(!ls||rq.ts>ls.ts)}
+let _dkLs=0;
+async function dkLockSync(){if(Date.now()-_dkLs<45000||!S.bundle||S.bundle.role!=="driver")return;_dkLs=Date.now();const dir=S.bundle.dir;
+  const ds=[...new Set(Object.values(dkIdx()).map(x=>x.date))].filter(d=>d>=START);let ch=false;
+  try{for(let i=0;i<ds.length;i+=6)await Promise.all(ds.slice(i,i+6).map(async d=>{const b=(S.server[dir+"|"+d]||[]).length;await ghList(dir,d);await fetchNy(dir,d);if((S.server[dir+"|"+d]||[]).length!==b)ch=true}))}catch(e){}
+  const o=document.getElementById("dkview");if(o&&ch){const top=o.scrollTop;await dkArch();const n=document.getElementById("dkview");if(n)n.scrollTop=top}}
 document.addEventListener("click",async e=>{const t=e.target.closest("[data-dk]");if(!t)return;
+  if(t.dataset.dk==="lasbegar"){const k=t.dataset.k,x=dkIdx()[k];if(!x)return;t.disabled=true;const now=new Date(),c=S.bundle.car||{};
+    const q=queue();q.push({name:now.getTime()+"_"+x.order+"_lasbegar.json",date:x.date,sent:false,data:{typ:"lasbegar",order:x.order,datum:x.date,tid:now.toISOString(),bil:c.name||"",forare:curDriver(S.bundle.dir,x.date,c.driver)||"",from:x.from,to:x.to}});saveQueue(q);
+    toast("Förfrågan skickad till kontoret.");const sc=document.getElementById("dkview"),top=sc?sc.scrollTop:0;await dkArch();const n=document.getElementById("dkview");if(n)n.scrollTop=top;sync();return}
   if(t.dataset.dk==="arch"){await dkArch();return}
   if(t.dataset.dk==="kord"){const k=t.dataset.k,x=dkIdx()[k];if(x){await kordSet(x.date,x.order,t.dataset.v==="1");const sc=document.getElementById("dkview");const top=sc?sc.scrollTop:0;await dkArch();const n=document.getElementById("dkview");if(n)n.scrollTop=top}return}
   if(t.dataset.dk==="ashow"){const k=t.dataset.k;let en=null;try{en=await dkKv(k)}catch(x){}
@@ -1174,6 +1185,8 @@ function renderArk(){
     if(dl.length)top+='<div class="card" style="margin-top:14px;border-left:4px solid '+(pend.length?'#b26b00':'var(--line)')+'"><b>Raderingsförfrågningar från förarna'+(pend.length?' ('+pend.length+' väntar)':'')+'</b><p class="muted" style="font-size:14px;margin:6px 0">Godkänner du döljs deklarationen i förarens arkiv. Den ligger kvar hos dig i arkivet.</p>'+
       (pend.length?'<table style="width:100%;border-collapse:collapse;font-size:14px"><tbody>'+pend.map(x=>'<tr style="border-top:1px solid var(--line)"><td>'+esc(x.date)+'</td><td>'+esc(x.car)+'</td><td>'+esc(x.order)+'</td><td>'+esc(x.from)+' → '+esc(x.to)+'</td><td><button class="btn small go" data-dl="ok" data-k="'+esc(x.k)+'">Godkänn</button> <button class="btn small" data-dl="nej" data-k="'+esc(x.k)+'">Neka</button></td></tr>').join("")+'</tbody></table>':'<p class="muted">Inga väntande.</p>')+
       (done.length?'<details style="margin-top:8px"><summary class="muted" style="cursor:pointer;font-size:14px">Tidigare ('+done.length+')</summary><table style="width:100%;border-collapse:collapse;font-size:13px"><tbody>'+done.map(x=>'<tr style="border-top:1px solid var(--line)"><td>'+esc(x.date)+'</td><td>'+esc(x.car)+'</td><td>'+esc(x.order)+'</td><td>'+esc(x.from)+' → '+esc(x.to)+'</td><td>'+(x.st==="ok"?(x.direkt?'Raderad av föraren (före 5 nov)':'Godkänd'):'Nekad')+'</td></tr>').join("")+'</tbody></table></details>':'')+'</div>'}
+  {const rq=[];Object.keys(S.server).forEach(k=>{const i=k.indexOf("|"),dir=k.slice(0,i),date=k.slice(i+1);const st=statesFor(dir,date);st.forEach((e,key)=>{if(e.type!=="lasbegar")return;if(!lockGet(dir,date,e.order))return;const ls=st.get(e.order+"|las");if(ls&&ls.ts>=e.ts)return;rq.push({dir,date,order:e.order,d:evData(e),ts:e.ts})})});
+    if(rq.length)top+='<div class="card" style="margin-top:14px;border-left:4px solid #b26b00"><b>Förfrågan om ändring av låsta deklarationer ('+rq.length+')</b><p class="muted" style="font-size:14px;margin:6px 0">Chauffören har bett om att få ändra. Prata med föraren först, lås sedan upp eller avfärda.</p><table style="width:100%;border-collapse:collapse;font-size:14px"><tbody>'+rq.sort((a,b)=>b.ts-a.ts).map(x=>'<tr style="border-top:1px solid var(--line)"><td>'+esc(x.date)+'</td><td>'+esc(x.d.bil||"")+(x.d.forare?' · '+esc(String(x.d.forare).split(" ")[0]):'')+'</td><td>'+esc(x.order)+'</td><td>'+esc(x.d.from||"")+' → '+esc(x.d.to||"")+'</td><td><button class="btn small go" data-ar="unlockreq" data-k="'+esc(x.dir+"|"+x.date+"|"+x.order)+'">Lås upp</button> <button class="btn small" data-ar="denyreq" data-k="'+esc(x.dir+"|"+x.date+"|"+x.order)+'">Avfärda</button></td></tr>').join("")+'</tbody></table></div>'}
   top+=pgCard();
   {const ad=Object.keys(S.dl.d||{}).map(k=>Object.assign({k},S.dl.d[k])).filter(x=>x.st==="adm");
     if(ad.length)top+='<div class="card" style="margin-top:14px;border-left:4px solid var(--line)"><b>Raderade av kontoret ('+ad.length+')</b><div class="muted" style="font-size:13px">Syns inte i arkivet eller hos förarna. Sparas och kan återställas.</div><table style="width:100%;border-collapse:collapse;font-size:14px"><tbody>'+ad.map(x=>'<tr style="border-top:1px solid var(--line)"><td>'+esc(x.date)+'</td><td>'+esc(x.car)+'</td><td>'+esc(x.order)+'</td><td>'+esc(x.from)+' → '+esc(x.to)+'</td><td><button class="btn link" data-ar="admrestore" data-k="'+esc(x.k)+'">Återställ</button></td></tr>').join("")+'</tbody></table></div>'}
@@ -1181,6 +1194,9 @@ function renderArk(){
   return h.replace("<!--TOP-->",top)}
 document.addEventListener("click",async e=>{const t=e.target.closest("[data-ar]");if(!t||!S.bundle)return;const a=t.dataset.ar;
   if(a==="car"){S.ar.car=t.dataset.c;render();return}
+  if(a==="unlockreq"||a==="denyreq"){const [dir,date,order]=t.dataset.k.split("|");const cur=lockGet(dir,date,order);t.disabled=true;
+    if(a==="unlockreq")await admEvent(dir,date,order,"las",{on:false,ok:null});else await admEvent(dir,date,order,"las",{on:true,ok:cur&&cur.ok!==undefined?cur.ok:null});
+    S.ar.rows=akItems();render();return}
   if(a==="open"){const x=(S.ar.rows||[]).slice().reverse()[+t.dataset.i];if(x)try{pdfOverlay(await makePdf([x.leg],x.r),x.leg.order+".pdf")}catch(err){toast("Kunde inte skapa PDF:en.")}return}
   if(a==="lock"||a==="unlock"){const x=(S.ar.rows||[]).slice().reverse()[+t.dataset.i];if(!x)return;t.disabled=true;
     try{await admEvent(x.dir,x.date,x.leg.order,"las",{on:a==="lock",ok:a==="lock"?(x.ok===undefined?null:x.ok):null});if(a==="lock"){const o=x;}}catch(err){toast("Kunde inte spara låsningen.")}
@@ -2465,7 +2481,7 @@ function renderSum(){
    sec("Körningar med släp (appen)",O.trl.length?tbl(["Dag","Bil","Släp","Körn."],O.trl):'<p class="muted" style="margin:0">Inga.</p>')+
    sec("Rapporterat i appen per dag",tbl(["Datum","Bil","Förare","Släp","Körn.","Lossade","kg"],O.perDag.sort((a,b)=>a[0]<b[0]?1:-1))):"");
 }
-function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v98</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v97 – skicka den här texten till mig.</div>'}}
+function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v99</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v97 – skicka den här texten till mig.</div>'}}
 function renderAdmin(){
   const ds=days(),B=S.bundle;let h='<div class="pagehead"><h2>Översikt</h2><p class="muted">Dagens körningar, status från förarna och aviseringar.</p></div>';
   {const D=S.date||today(),cs=B.cars.filter(c=>c.days[D]);let nL=0,nU=0,nG=0;cs.forEach(c=>{const st=statesFor(c.dir,D);if(st.get("dag|godkand"))nG++;allLegs(c.dir,D,c.days[D].legs.map(l=>Object.assign({},l,{from:{name:l.from},to:{name:l.to}}))).filter(l=>!l.deleted).forEach(l=>{nL++;if(st.get(l.order+"|lossad"))nU++})});
@@ -2486,6 +2502,7 @@ function renderAdmin(){
   return h+'</div><p class="muted" style="font-size:13.5px">Uppdateras varje minut.</p>';
 }
 let _rs=0;
+function runAL(){if(S.alRun){S.alAgain=true;return}S.alRun=true;afterLoad(true).catch(()=>{}).then(()=>{S.alRun=false;renderSoon();if(S.alAgain){S.alAgain=false;runAL()}})}
 function renderSoon(){if(_rs)return;_rs=requestAnimationFrame(()=>{_rs=0;const a=document.activeElement;if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)&&a.id!=="drvOther")return;S.bgRender=true;try{render()}finally{S.bgRender=false}})}
 (function(){const m=document.getElementById("main");if(!m)return;const d=Object.getOwnPropertyDescriptor(Element.prototype,"innerHTML");let last=null;
   Object.defineProperty(m,"innerHTML",{configurable:true,get(){return d.get.call(m)},set(v){if(S.bgRender&&v===last)return;last=v;
@@ -2650,8 +2667,10 @@ document.addEventListener("click",async e=>{
   if(t.dataset.pedel){const id=t.dataset.pedel;if(!confirm("Ta bort pausen?"))return;
     await pausMutate(()=>{let o=S.paus.find(v=>v.id===id);if(o&&o.manual)S.paus=S.paus.filter(v=>v.id!==id);else{if(!o){o={id};S.paus.push(o)}o.deleted=true}},"Borttagen.");return}
   if(t.dataset.ntsend){readNt();const T=S.nt;if(!(T.text||"").trim()&&!T.tid){T.err="Skriv ett meddelande eller ange klockslag.";render();return}t.disabled=true;S.nt=null;await record("notis","dag",{kind:T.kind,tid:T.tid||"",text:(T.text||"").trim()});toast("Kontoret har fått ditt meddelande.");return}
-  if(t.dataset.view){S.view=t.dataset.view;render();await afterLoad(true);render();return}
-  if(t.dataset.date){S.date=t.dataset.date;S.userDate=S.date;render();window.scrollTo(0,0);await afterLoad(true);render();return}
+  if(t.dataset.view){S.view=t.dataset.view;if(S.view==="ark"){try{S.ar.rows=akItems()}catch(e){}}render();
+    if(S.view==="ark")arLoad().then(()=>renderSoon());
+    runAL();return}
+  if(t.dataset.date){S.date=t.dataset.date;S.userDate=S.date;render();window.scrollTo(0,0);runAL();return}
   if(t.dataset.lastopen){const r0=route(),l0=r0&&r0.legs.find(x=>x.order===t.dataset.lastopen);S.lastForm={order:t.dataset.lastopen,nr:((l0&&l0.flakPlan)||[]).slice(),vol:[],bar:[],ask:false,err:"",antal:(l0&&l0.antal)||1,from:(l0&&l0.from&&l0.from.name)||""};render();return}
   if(t.dataset.lfcancel){S.lastForm=null;render();return}
   if(t.dataset.lfok){const r=route(),l=allLegs(S.bundle.dir,r.date,r.legs).find(x=>x.order===S.lastForm.order);if(l){t.disabled=true;await saveLast(l)}return}
