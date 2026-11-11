@@ -1651,7 +1651,7 @@ async function loadXP(){if(!S.bundle||!S.bundle.planKey||!S.bundle.status)return
   catch(e){const c=store.get("xp");if(c&&!S.xp.length){try{S.xp=await openPlan(unb64(c))}catch(x){}}}
   xpApply()}
 /* inbyggda platser som saknar riktig adress i grunddatan; ersätts när kontoret lägger till samma namn med adress */
-const DEFP=[{id:"almhult",name:"Älmhult",street:"",zip:"",city:"Älmhult",kind:"station",std:1}];
+const DEFP=[{id:"almhult",name:"Älmhult",street:"Äskya 1",zip:"343 90",city:"Älmhult",kind:"station",std:1}];
 function xpApply(){if(!S.basePlaces||!S.bundle)return;const ids=new Set(S.basePlaces.map(p=>p.id)),xs=(S.xp||[]).filter(p=>!ids.has(p.id)),nm=new Set(S.basePlaces.concat(xs).map(p=>String(p.name||"").toLowerCase()));
   S.bundle.places=S.basePlaces.concat(xs).concat(DEFP.filter(d=>!nm.has(d.name.toLowerCase())))}
 const placeNoAddr=()=>(S.bundle.places||[]).filter(p=>p.std&&!p.street);
@@ -1903,6 +1903,83 @@ document.addEventListener("click",async e=>{const t=e.target.closest("[data-fe]"
 /* kontor */
 S.fv={f:"akt",open:null};
 function felNy(){return S.fel.filter(x=>x.status==="ny").length}
+/* ---------- Mapon: mil, mätare, förare, vikt och flak-GPS (läses från rutt-status, skrivs av Mapon-synk/Flak-synk) ---------- */
+S.mp={d:null,docs:{},err:{},busy:false,fp:null,fpErr:"",fpBusy:false};
+const mpDfind=(o,k,dep)=>{dep=dep||0;if(o==null||dep>7||typeof o!=="object")return undefined;if(!Array.isArray(o)&&Object.prototype.hasOwnProperty.call(o,k)&&o[k]!=null)return o[k];for(const v of (Array.isArray(o)?o:Object.values(o))){const r=mpDfind(v,k,dep+1);if(r!==undefined)return r}return undefined};
+const mpNum=v=>{if(v==null||v==="")return null;if(typeof v==="object")v=v.value!==undefined?v.value:v.v!==undefined?v.v:null;const n=Number(v);return isFinite(n)?n:null};
+const mpSer=a=>Array.isArray(a)?a.map(x=>Array.isArray(x)?mpNum(x[1]):mpNum(x)).filter(x=>x!=null):[];
+const mpF=(n,d)=>n==null?"–":Number(n).toLocaleString("sv-SE",{maximumFractionDigits:d==null?1:d});
+const mpDate0=()=>{const d=new Date();d.setDate(d.getDate()-1);return iso(d)};
+const mpShift=(s,n)=>{const d=new Date(s+"T12:00:00");d.setDate(d.getDate()+n);return iso(d)};
+async function mpLoad(date){const st=S.bundle&&S.bundle.status;if(!st||!S.bundle.planKey||S.mp.docs[date]!==undefined&&S.mp.docs[date]!==null)return;
+  const ck="mapon:"+date;
+  try{const r=await fetch(GH+st.repo+"/contents/mapon/"+date+".json?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});
+    if(r.status===404){S.mp.docs[date]=false;S.mp.err[date]="";return}
+    if(!r.ok)throw new Error("Servern svarade "+r.status);
+    const j=await r.json();if(!j.content){S.mp.docs[date]=false;S.mp.err[date]="";return}const c=j.content.replace(/\n/g,"");S.mp.docs[date]=await openPlan(unb64(c));S.mp.err[date]=""}
+  catch(e){S.mp.err[date]="Kunde inte läsa Mapon-filen ("+((e&&e.message)||"nätverk")+")";if(S.mp.docs[date]===undefined)S.mp.docs[date]=null}}
+async function mpLoadFlak(){const st=S.bundle&&S.bundle.status;if(!st||!S.bundle.planKey||S.mp.fpBusy)return;S.mp.fpBusy=true;
+  try{const r=await fetch(GH+st.repo+"/contents/plan/_flakplan/all.json?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});
+    if(r.status===404){S.mp.fp=false;return}if(!r.ok)throw new Error("Servern svarade "+r.status);
+    const j=await r.json();S.mp.fp=await openPlan(unb64(j.content.replace(/\n/g,"")));S.mp.fpErr=""}
+  catch(e){S.mp.fpErr="Kunde inte läsa flakdata ("+((e&&e.message)||"nätverk")+")"}finally{S.mp.fpBusy=false}}
+function mpUnit(doc,u){const E=doc&&doc.dygn&&doc.dygn.enheter&&doc.dygn.enheter[u.unit_id]||{},raw=u.raw||{};
+  const km=a=>{const v=mpDfind(a,"mileage");return mpNum(v)};
+  const cs=mpDfind(E.can,"total_distance"),canS=mpSer(cs),cf=mpSer(mpDfind(E.can,"fuel_level"));
+  let routeKm=0,nRoute=0;const rt=E.route&&(mpDfind(E.route,"routes")||mpDfind(E.route,"route"))||null;
+  (Array.isArray(rt)?rt:[]).forEach(x=>{const d=mpNum(x.distance);if(d!=null){routeKm+=d/1000;nRoute++}});
+  const drivers={};(Array.isArray(rt)?rt:[]).forEach(x=>{const n=x.driver&&(x.driver.name||x.driver)||null;if(n&&typeof n==="string")drivers[n]=1});
+  const w=raw.weights||raw.weight||null;
+  const axle=mpSer(mpDfind(E.can,"weight_on_axis"));
+  return {id:u.unit_id,name:u.number||u.label||u.vehicle_title||("Enhet "+u.unit_id),
+    odo0:canS.length?canS[0]:null,odo1:canS.length?canS[canS.length-1]:null,
+    gps0:km(E.start),gps1:km(E.slut),routeKm:nRoute?routeKm:null,nRoute,
+    drivers:Object.keys(drivers),drvNow:mpDfind(raw.drivers,"name")||mpDfind(raw,"driver_name")||null,
+    fuel0:cf.length?cf[0]:null,fuel1:cf.length?cf[cf.length-1]:null,
+    axMin:axle.length?Math.min.apply(null,axle):null,axMax:axle.length?Math.max.apply(null,axle):null,
+    weights:w,E:E}}
+function mpFlakRows(){const fp=S.mp.fp;if(!fp||!fp.docs)return null;
+  const d=fp.docs.find(x=>x.collection==="flakpos");if(!d||!d.data)return [];const D=d.data,hints=Array.isArray(D.hints)?D.hints:[];
+  const tm=v=>{if(v==null||v==="")return null;if(typeof v==="number")return v<1e11?v*1000:v;const t=Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(v)?v:String(v).replace(" ","T")+"Z");return isFinite(t)?t:null};
+  const dist=(a,b,c,e)=>{const R=6371e3,r=x=>x*Math.PI/180,dl=r(c-a),dn=r(e-b),h=Math.sin(dl/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h))};
+  return (Array.isArray(D.units)?D.units:[]).filter(u=>u&&typeof u.lat==="number"&&typeof u.lng==="number"&&u.gps!==false).map(u=>{
+    let best=null,bd=1e9;hints.forEach(h=>{if(typeof h.lat!=="number"||typeof h.lng!=="number")return;const x=dist(u.lat,u.lng,h.lat,h.lng);if(x<bd){bd=x;best=h}});
+    return {nr:flNr(u.n),lat:u.lat,lon:u.lng,ts:tm(u.posT),state:u.state||"",since:u.since||"",near:best&&bd<500?best.a:"",nearM:Math.round(bd),over:!!u.over}})}
+function renderMapon(){
+  const B=S.bundle;if(!B.planKey||!B.status)return '<div class="card muted">Appen saknar åtkomst till Mapon-data.</div>';
+  const m=S.mp;if(!m.d)m.d=mpDate0();const date=m.d;
+  if(m.docs[date]===undefined&&!m.busy){m.busy=true;mpLoad(date).finally(()=>{m.busy=false;if(S.view==="mapon")renderSoon()})}
+  if(m.fp===null&&!m.fpBusy){mpLoadFlak().finally(()=>{if(S.view==="mapon")renderSoon()});m.fp=undefined}
+  const doc=m.docs[date];
+  let h='<div class="pagehead"><h2>Mapon</h2><p class="muted">Läses från Mapon varje natt (och flakdata var 5:e minut). Detta är avstämning, inget ändras i planer eller deklarationer.</p></div>';
+  h+='<div class="card" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn small" data-mpd="-1">‹</button><input type="date" data-mpd="set" value="'+esc(date)+'" style="font-size:16px"><button class="btn small" data-mpd="1">›</button><button class="btn small" data-mpd="re">Hämta igen</button></div>';
+  if(m.err[date])h+='<div class="notice warn">'+esc(m.err[date])+'</div>';
+  if(doc===undefined||m.busy&&doc===undefined)h+='<div class="card muted">Hämtar…</div>';
+  else if(doc===false)h+='<div class="card muted">Ingen Mapon-data sparad för '+esc(date)+'. Nattkörningen sparar gårdagen och dagen före; äldre dygn kan hämtas via Mapon-synk i GitHub.</div>';
+  else if(doc){
+    const us=(doc.enheter||[]).map(u=>mpUnit(doc,u));
+    h+='<div class="tiles">'+us.map(x=>{const d=x.odo0!=null&&x.odo1!=null?x.odo1-x.odo0:null,g=x.gps0!=null&&x.gps1!=null?x.gps1-x.gps0:null,w=x.weights;
+      const wt=w&&typeof w==="object"?Object.entries(w).filter(([k,v])=>mpNum(v)!=null).map(([k,v])=>mpF(mpNum(v),0)).join(" / "):"";
+      return '<div class="tile"><span class="k">'+esc(x.name)+((x.drivers[0]||x.drvNow)?' · '+esc(String(x.drivers[0]||x.drvNow).split(" ")[0]):'')+'</span>'+
+      '<span class="v" style="font-size:20px">'+(d!=null?mpF(d)+' km':g!=null?mpF(g)+' km':x.routeKm!=null?mpF(x.routeKm)+' km':'–')+'</span>'+
+      '<span class="muted" style="font-size:13px">'+(d!=null?'Mätare (bilens CAN): '+mpF(x.odo0,0)+' → '+mpF(x.odo1,0)+'<br>':'')+(g!=null?'GPS-mätare: '+mpF(x.gps0,0)+' → '+mpF(x.gps1,0)+' ('+mpF(g)+' km)<br>':'')+(x.routeKm!=null?'Rutter: '+x.nRoute+' st, '+mpF(x.routeKm)+' km<br>':'')+(x.drivers.length?'Förare: '+esc(x.drivers.join(", "))+'<br>':'')+(x.fuel0!=null?'Bränslenivå: '+mpF(x.fuel0,0)+' → '+mpF(x.fuel1,0)+' %<br>':'')+(x.axMax!=null?'Axellast under dygnet: '+mpF(x.axMin,0)+'–'+mpF(x.axMax,0)+' kg<br>':'')+(wt?'Axlar nu: '+esc(wt)+' kg<br>':'')+(d==null&&g==null&&x.routeKm==null?'Mapon gav ingen körsträcka för dygnet.':'')+'</span>'+
+      (d!=null&&g!=null&&Math.abs(d-g)>Math.max(5,d*.1)?'<span class="notice warn" style="font-size:12px">Mätare och GPS skiljer '+mpF(Math.abs(d-g))+' km</span>':'')+'</div>'}).join("")+'</div>';
+    h+='<details class="card"><summary>Rådata för dygnet (felsökning)</summary><pre style="white-space:pre-wrap;font-size:11px;max-height:300px;overflow:auto">'+esc(JSON.stringify(us.map(x=>x.E),null,1).slice(0,6000))+'</pre></details>'}
+  /* flak */
+  h+='<div class="pagehead" style="margin-top:18px"><h3>Flak: GPS mot registrerad plats</h3></div>';
+  if(m.fpErr)h+='<div class="notice warn">'+esc(m.fpErr)+'</div>';
+  const fr=mpFlakRows();
+  if(m.fp===false)h+='<div class="card muted">Ingen flakdata sparad än.</div>';
+  else if(fr==null)h+='<div class="card muted">Hämtar flakdata…</div>';
+  else if(!fr.length)h+='<div class="card muted">Hittade inga flak med GPS-position i flakdatan.</div>';
+  else{const loc=(S.fk&&S.fk.loc)||{};
+    h+='<div class="card"><p class="muted" style="font-size:13px">GPS uppdateras bara ibland (ofta en gång per 1–2 dygn), så åldern syns. Din registrering gäller alltid före GPS; här flaggas bara avvikelser att kontrollera.</p><table style="width:100%;font-size:14px;border-collapse:collapse"><tr style="text-align:left"><th>Flak</th><th>Registrerad plats</th><th>GPS</th><th>Nära</th><th>Uppdaterad</th></tr>'+
+    fr.sort((a,b)=>String(a.nr).localeCompare(String(b.nr),"sv",{numeric:true})).map(x=>{const L=loc[x.nr],old=!x.ts||Date.now()-x.ts>2*864e5;return '<tr style="border-top:1px solid #ddd"><td><b>'+esc(x.nr)+'</b></td><td>'+(L?esc(typeof L==="object"?(L.plats||L.p||L.loc||JSON.stringify(L)):L):'<span class="muted">saknas</span>')+'</td><td><a target="_blank" href="https://www.google.com/maps?q='+x.lat+','+x.lon+'">'+x.lat.toFixed(4)+', '+x.lon.toFixed(4)+'</a></td><td>'+(x.near?esc(x.near)+' <span class="muted">('+x.nearM+' m)</span>':'<span class="muted">ingen känd plats</span>')+'</td><td'+(old?' style="color:#b45309"':'')+'>'+(x.ts?esc(ago(x.ts)):'okänt')+'</td></tr>'}).join("")+'</table></div>'}
+  return h}
+document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest("button[data-mpd]");if(!b||!S.bundle)return;const a=b.getAttribute("data-mpd");if(!S.mp.d)S.mp.d=mpDate0();
+  if(a==="-1"||a==="1")S.mp.d=mpShift(S.mp.d,+a);else if(a==="re"){delete S.mp.docs[S.mp.d];S.mp.fp=null}render()});
+document.addEventListener("change",e=>{const t=e.target;if(t&&t.matches&&t.matches('input[data-mpd="set"]')&&t.value){S.mp.d=t.value;render()}});
+
 function renderFel(){
   const A=S.fv,all=S.fel,list=all.filter(x=>A.f==="alla"||(A.f==="mack"?x.typ==="station":(A.f==="akt"?x.status!=="klar":x.status===A.f)));
   let h='<div class="pagehead"><h2>Verkstad</h2><p class="muted">Felanmälningar från förarna, med bilder. Svara och uppdatera status så ser föraren det direkt.</p></div>';
@@ -2481,7 +2558,7 @@ function renderSum(){
    sec("Körningar med släp (appen)",O.trl.length?tbl(["Dag","Bil","Släp","Körn."],O.trl):'<p class="muted" style="margin:0">Inga.</p>')+
    sec("Rapporterat i appen per dag",tbl(["Datum","Bil","Förare","Släp","Körn.","Lossade","kg"],O.perDag.sort((a,b)=>a[0]<b[0]?1:-1))):"");
 }
-function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v100</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v97 – skicka den här texten till mig.</div>'}}
+function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="mapon"?renderMapon():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v101</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v101 – skicka den här texten till mig.</div>'}}
 function renderAdmin(){
   const ds=days(),B=S.bundle;let h='<div class="pagehead"><h2>Översikt</h2><p class="muted">Dagens körningar, status från förarna och aviseringar.</p></div>';
   {const D=S.date||today(),cs=B.cars.filter(c=>c.days[D]);let nL=0,nU=0,nG=0;cs.forEach(c=>{const st=statesFor(c.dir,D);if(st.get("dag|godkand"))nG++;allLegs(c.dir,D,c.days[D].legs.map(l=>Object.assign({},l,{from:{name:l.from},to:{name:l.to}}))).filter(l=>!l.deleted).forEach(l=>{nL++;if(st.get(l.order+"|lossad"))nU++})});
@@ -2549,7 +2626,7 @@ function render(){
   if(isOv()){
     if(S.bundle.role==="ekonomi"){M.innerHTML='<div class="content">'+renderSum()+'</div>';return}
     const cnt=(S.bundle.planCars||[]).reduce((a,c)=>a+notisUnread(c.dir,today()).length+notisUnread(c.dir,iso(new Date(Date.now()+864e5))).length,0)+andringNek();
-    const items=[["ov","Översikt",cnt],["plan","Planering",0],["msg","Meddelanden",0],["stat","Stationer",0],["paus","Pauser",0],["ham","Hämtningar",hmOpen()],["fel","Verkstad",felNy()],["ark","Arkiv",(S.ar.rows||[]).filter(x=>x.ok===false&&!lockGet(x.dir,x.date,x.leg.order)).length+Object.keys(S.dl.d||{}).filter(k=>S.dl.d[k].st==="beg").length],["map","Karta",0],["flk","Flak",0],["pers","Personal",0],["led","Ledighet",S.led.filter(x=>x.status==="ny").length],["vec","Vecka",0],["mil","Milrapport",0],["sum","Sammanställning",0]];
+    const items=[["ov","Översikt",cnt],["plan","Planering",0],["msg","Meddelanden",0],["stat","Stationer",0],["paus","Pauser",0],["ham","Hämtningar",hmOpen()],["fel","Verkstad",felNy()],["ark","Arkiv",(S.ar.rows||[]).filter(x=>x.ok===false&&!lockGet(x.dir,x.date,x.leg.order)).length+Object.keys(S.dl.d||{}).filter(k=>S.dl.d[k].st==="beg").length],["map","Karta",0],["mapon","Mapon",0],["flk","Flak",0],["pers","Personal",0],["led","Ledighet",S.led.filter(x=>x.status==="ny").length],["vec","Vecka",0],["mil","Milrapport",0],["sum","Sammanställning",0]];
     const nav='<nav class="side"><div class="sidehd">Kontoret</div>'+items.map(([k,l,n])=>'<button data-view="'+k+'"'+(S.view===k?' aria-current="page"':'')+'><span>'+l+'</span>'+(n?'<i class="badge">'+n+'</i>':'')+'</button>').join("")+'</nav>';
     M.innerHTML='<div class="shell">'+nav+'<div class="content">'+slotAlarm()+adminView()+'</div></div>';return}
   const ds=days();let h=alertsHtml()+startBar()+gpsCard();
