@@ -2360,29 +2360,80 @@ const sd=v=>v?String(v).replace(/ 20\d\d/,""):"—";
 const kgS=n=>n==null?"–":String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g," ")+" kg";
 const barCls=b=>b<21?"red":b<80?"yel":"grn";
 function statOrder(a,b){const r={b24:0,b48:1,ok:2,none:3};if(r[a.status]!==r[b.status])return r[a.status]-r[b.status];const h=x=>x.kvar&&x.perDygn?x.kvar/x.perDygn:1e9;return h(a)-h(b)}
-function renderStat(){
-  const L=S.stat||[],tags=[...new Set(L.map(x=>x.tag).filter(Boolean))];
-  const list=L.filter(x=>!S.stTag||x.tag===S.stTag).slice().sort(statOrder);
-  const n24=L.filter(x=>x.status==="b24"),sum=L.reduce((a,x)=>a+(x.perDygn||0),0),n48=L.filter(x=>x.status==="b48").length;
-  let h='<div class="sx"><div class="pagehead"><h2>Stationer</h2><p class="muted">Tryck, gasmängd och prognos per station. Sorterat på när gasen tar slut.</p></div>';
-  h+='<div class="tiles"><div class="tile'+(n24.length?' hot':'')+'"><span class="k">Behöver byte inom 24 h</span><span class="v">'+n24.length+' <small>station'+(n24.length===1?'':'er')+'</small></span><span class="muted" style="font-size:13px">'+esc(n24.map(x=>x.name).join(", ")||"–")+'</span></div>'+
-    '<div class="tile"><span class="k">Byte inom 2 dygn</span><span class="v">'+n48+' <small>stationer</small></span></div>'+
-    '<div class="tile"><span class="k">Förbrukning per dygn</span><span class="v">'+esc(kgS(sum))+'</span><span class="muted" style="font-size:13px">'+L.filter(x=>x.perDygn).length+' stationer</span></div>'+
-    '<div class="tile"><span class="k">Stationer</span><span class="v">'+L.length+'</span><span class="muted" style="font-size:13px">'+L.filter(x=>x.status==="none").length+' saknar avläsning</span></div></div>';
-  h+='<div class="fchips"><span class="lbl">TAGG</span><button class="chip" data-sttag=""'+(!S.stTag?' aria-current="date"':'')+'>Alla '+L.length+'</button>'+tags.map(t=>'<button class="chip" data-sttag="'+esc(t)+'"'+(S.stTag===t?' aria-current="date"':'')+'>'+esc(t)+' '+L.filter(x=>x.tag===t).length+'</button>').join("")+'</div>';
-  if(S.stEdit){const x=L.find(y=>y.id===S.stEdit);if(x){const inp='style="font:inherit;font-size:16px;padding:8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg);width:100%"';
-    h+='<div class="card sx-edit"><div class="card-h" style="padding:0 0 10px;border:0"><h3>Läs av · '+esc(x.name)+'</h3><span class="hint">Prognosen räknas om när du sparar</span></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px">'+
-     '<label class="fld">Tryck flakplatser (bar, kommaseparerat)<input id="seP" value="'+esc(x.places.join(", "))+'" '+inp+'></label><label class="fld">Lager (bar)<input id="seL" value="'+esc(x.lager==null?"":x.lager)+'" '+inp+'></label>'+
-     '<label class="fld">Kvar nu (kg)<input id="seK" inputmode="numeric" value="'+esc(x.kvar==null?"":x.kvar)+'" '+inp+'></label><label class="fld">Förbrukning per dygn (kg)<input id="seD" inputmode="numeric" value="'+esc(x.perDygn||"")+'" '+inp+'></label>'+
-     '<label class="fld">Ansvarig (tagg)<input id="seT" value="'+esc(x.tag||"")+'" '+inp+'></label><label class="fld">Status<select id="seS" '+inp+'>'+Object.keys(STS).map(k=>'<option value="'+k+'"'+(x.status===k?' selected':'')+'>'+STS[k][0]+'</option>').join("")+'</select></label></div>'+
-     '<div class="acts"><button class="btn go" data-stsave="'+esc(x.id)+'">Spara avläsning</button><button class="btn" data-stcancel="1">Avbryt</button></div></div>'}}
-  h+='<div class="card"><div class="card-h"><h3>Alla stationer</h3><span class="hint">'+list.length+' av '+L.length+' · klicka på en rad för att läsa av</span></div><div class="sttable"><div class="strow sthead"><span>Station</span><span>Status</span><span class="r">Kvar nu</span><span>Avläst</span><span>Tar slut, normal</span><span>Tar slut, hög</span><span>Första flaket tomt</span><span class="r">Per dygn</span></div>'+
-   list.map(x=>{const st=STS[x.status]||STS.none;
-    return '<div class="strow" data-stedit="'+esc(x.id)+'" role="button" tabindex="0"><span class="stn"><b class="stname">'+esc(x.name)+'</b>'+(x.tag?'<span class="tag">'+esc(x.tag)+'</span>':'')+
-     '<span class="pills2">'+x.places.map((b,i)=>'<i class="bp '+barCls(b)+'"><u></u>'+(i+1)+' <b>'+b+'</b> bar</i>').join("")+(x.lager!=null?'<i class="bp '+(x.lager<200?'red':'grn')+'"><u></u>Lager <b>'+x.lager+'</b> bar</i>':'')+'</span></span>'+
-     '<span class="sts '+st[1]+'"><u></u><b>'+esc(st[0])+'</b></span><span class="r">'+esc(x.kvar==null?"—":kgS(x.kvar))+'</span><span>'+esc(sd(x.avlast))+(x.src?'<br><small class="muted">'+esc(x.src)+'</small>':'')+'</span><span>'+esc(sd(x.normal))+'</span><span>'+esc(sd(x.hog))+'</span><span>'+esc(sd(x.forsta))+'</span><span class="r">'+esc(kgS(x.perDygn||null))+'</span></div>'}).join("")+'</div></div>';
-  h+='<p class="sx-foot">'+esc(STAT_SRC)+'</p></div>';
+/* ---------- Stationer live: Flakplanering (flakstatus, cons, flakpos) via Flak-synk ---------- */
+S.fl={slim:null,sha:null,busy:false,err:"",ts:0,open:"",sort:"slut"};
+try{const c=store.get("fpslim");if(c)S.fl.slim=JSON.parse(c)}catch(e){}
+const flSlug=s=>String(s||"").replace(/^fleet:/,"");
+function flSlimOf(j){const docs=j.docs||[],by={};docs.forEach(x=>{(by[x.collection]=by[x.collection]||[]).push(x)});
+  const get=(c,id)=>(by[c]||[]).find(x=>x.id===id),cfg=id=>{const x=get("config",id);return x&&x.data||{}};
+  const stc=cfg("stations"),fl=cfg("flak"),pos=(get("flakpos","latest")||{}).data||{};
+  const status={};(by.flakstatus||[]).forEach(x=>{status[x.id]=x.data});
+  const cons={},names={};
+  (by.cons||[]).forEach(x=>{const d=x.data||{},slug=d.st||String(x.id).replace(/_\d{4}-\d\d$/,"");const m=d.month||String(x.id).slice(-7);
+    if(d.station)names[slug]=d.station;const o=cons[slug]=cons[slug]||{};
+    Object.entries(d.days||{}).forEach(([dd,v])=>{const k=Array.isArray(v.k)?v.k.reduce((a,b)=>a+(+b||0),0):0;o[m+"-"+String(dd).padStart(2,"0")]={kg:Math.round(k),n:v.n||0}})});
+  const cut=new Date();cut.setDate(cut.getDate()-75);const cs=iso(cut);
+  Object.keys(cons).forEach(s=>{Object.keys(cons[s]).forEach(d=>{if(d<cs)delete cons[s][d]})});
+  const fleet={};(fl.fleet||[]).forEach(f=>{fleet[f.id]=f.name});
+  return {updated:j.updated||null,status,cons,names:Object.assign({},names,stc.names||{}),tags:stc.tags||{},setup:stc.setup||{},off:stc.off||{},fleet,pos:{at:pos.at,units:pos.units||[],hints:pos.hints||[],moves:(pos.moves||[]).slice(0,40),vehicles:pos.vehicles||[]}}}
+async function flLoad(force){const st=S.bundle&&S.bundle.status;if(!st||!S.bundle.planKey||S.fl.busy)return;S.fl.busy=true;
+  try{const r=await fetch(GH+st.repo+"/contents/plan/_flakplan?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});
+    if(r.status===404){S.fl.err="Ingen flakdata sparad än (Flak-synk har inte körts).";return}if(!r.ok)throw new Error("Servern svarade "+r.status);
+    const l=await r.json(),f=Array.isArray(l)&&l.find(x=>x.name==="all.json");if(!f)throw new Error("filen saknas");
+    if(!force&&S.fl.sha===f.sha&&S.fl.slim){S.fl.ts=Date.now();S.fl.err="";return}
+    /* filen är över 1 MB: hämta råbytes */
+    const rr=await fetch(GH+st.repo+"/contents/plan/_flakplan/all.json?t="+Date.now(),{headers:Object.assign(ghHeaders(st),{Accept:"application/vnd.github.raw+json"}),cache:"no-store"});if(!rr.ok)throw new Error("Servern svarade "+rr.status);
+    const j=await openPlan(new Uint8Array(await rr.arrayBuffer()));S.fl.slim=flSlimOf(j);S.fl.sha=f.sha;S.fl.ts=Date.now();S.fl.err="";
+    S.mp.fp={docs:[{collection:"flakpos",data:S.fl.slim.pos}]};
+    try{store.set("fpslim",JSON.stringify(S.fl.slim))}catch(e){}}
+  catch(e){S.fl.err="Kunde inte hämta flakdata ("+((e&&e.message)||"nätverk")+")"}finally{S.fl.busy=false}}
+const flName=(F,s)=>F.names[s]||String(s).replace(/-smalandska-branslen$/,"").replace(/-/g," ").replace(/^./,c=>c.toUpperCase());
+const flBar=(b,su)=>{const lo=(su&&su.lowBar)||80,mn=(su&&su.minBar)||20;return b<=mn?"red":b<lo?"yel":"grn"};
+function flSum(F,s,days){const c=F.cons[s]||{};let t=0,any=false;days.forEach(d=>{if(c[d]){t+=c[d].kg;any=true}});return any?t:null}
+function renderStatLive(){
+  const F=S.fl.slim;
+  if(!S.fl.ts&&!S.fl.busy&&!S.fl.err){flLoad().finally(()=>{if(S.view==="stat")renderSoon()})}
+  let h='<div class="card-h" style="margin-top:6px"><h3>Flakplanering – live</h3><span class="hint">'+(S.fl.busy?'uppdaterar… ':'')+(F&&F.updated?'hämtad '+esc(ago(Date.parse(F.updated))):'')+'</span></div>';
+  if(S.fl.err)h+='<div class="notice warn">'+esc(S.fl.err)+'</div>';
+  if(!F)return h+'<div class="card muted">Hämtar data från Flakplanering…</div>';
+  const today=iso(new Date()),days=n=>{const a=[];for(let i=1;i<=n;i++){const d=new Date();d.setDate(d.getDate()-i);a.push(iso(d))}return a};
+  const slugs=Object.keys(F.status).filter(s=>!F.off[s]);
+  const rows=slugs.map(s=>{const x=F.status[s]||{},su=F.setup[s]||{},sl=x.slots||[],bars=sl.filter(q=>q.on!==false).map(q=>q.bar),minb=bars.length?Math.min.apply(null,bars):null;
+    const ts=x.reportedAt?Date.parse(x.reportedAt):x.savedAt?Date.parse(x.savedAt):null,y=flSum(F,s,[days(1)[0]]),w=flSum(F,s,days(7)),mo=flSum(F,s,Object.keys(F.cons[s]||{}).filter(d=>d.slice(0,7)===today.slice(0,7)));
+    return {s,x,su,sl,minb,ts,y,w:w==null?null:w/7,mo,name:flName(F,s),tag:(F.tags[s]||[]).join(", ")}});
+  rows.sort((a,b)=>(a.minb==null)-(b.minb==null)||a.minb-b.minb);
+  const off=rows.filter(r=>r.x.online===false||r.x.stale).length,tot=rows.reduce((a,r)=>a+(r.w||0),0);
+  h+='<div class="tiles"><div class="tile"><span class="k">Stationer med live-data</span><span class="v">'+rows.length+'</span><span class="muted" style="font-size:13px">'+off+' offline eller gammal avläsning</span></div>'+
+     '<div class="tile"><span class="k">Förbrukning, snitt per dygn (7 d)</span><span class="v">'+esc(kgS(tot))+'</span></div>'+
+     '<div class="tile"><span class="k">Lägst tryck nu</span><span class="v">'+(rows[0]&&rows[0].minb!=null?esc(rows[0].name)+' <small>'+Math.round(rows[0].minb)+' bar</small>':'–')+'</span></div></div>';
+  h+='<div class="card"><div class="card-h"><h3>Alla stationer</h3><span class="hint">sorterat på lägsta tryck · tryck på en rad för detaljer</span></div><div class="sttable"><div class="strow sthead" style="grid-template-columns:2.2fr 1fr 1fr 1fr 1fr"><span>Station</span><span>Avläst</span><span class="r">Igår</span><span class="r">Snitt/dygn 7 d</span><span class="r">Denna månad</span></div>'+
+  rows.map(r=>{const o=S.fl.open===r.s,ls=r.x.store;
+    let t='<div class="strow" style="grid-template-columns:2.2fr 1fr 1fr 1fr 1fr" data-flopen="'+esc(r.s)+'" role="button" tabindex="0"><span class="stn"><b class="stname">'+esc(r.name)+'</b>'+(r.tag?'<span class="tag">'+esc(r.tag)+'</span>':'')+
+     '<span class="pills2">'+r.sl.map((q,i)=>'<i class="bp '+flBar(q.bar,r.su)+'"><u></u>'+(i+1)+' <b>'+Math.round(q.bar)+'</b> bar</i>').join("")+(ls&&ls.bar!=null?'<i class="bp '+(ls.bar<(r.su.storeMin||200)?'red':'grn')+'"><u></u>Lager <b>'+Math.round(ls.bar)+'</b> bar</i>':'')+'</span></span>'+
+     '<span'+(r.x.online===false||r.x.stale?' style="color:#b45309"':'')+'>'+(r.ts?esc(ago(r.ts)):'–')+(r.x.online===false?'<br><small>offline</small>':'')+(r.x.alarms&&r.x.alarms.tot?'<br><small style="color:#b91c1c">larm '+r.x.alarms.tot+'</small>':'')+'</span>'+
+     '<span class="r">'+esc(r.y==null?"—":kgS(r.y))+'</span><span class="r">'+esc(r.w==null?"—":kgS(r.w))+'</span><span class="r">'+esc(r.mo==null?"—":kgS(r.mo))+'</span></div>';
+    if(o){const c=F.cons[r.s]||{},ds=Object.keys(c).sort().slice(-14).reverse(),rm=r.x.runMin||{},stt=r.x.starts||{};
+      t+='<div class="card" style="margin:0 0 8px"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px"><div><b>Förbrukning (kg) senaste dagarna</b><table style="width:100%;font-size:14px">'+(ds.length?ds.map(d=>'<tr><td>'+esc(d.slice(5))+'</td><td class="r">'+esc(kgS(c[d].kg))+'</td><td class="r muted">'+c[d].n+' fyllningar</td></tr>').join(""):'<tr><td class="muted">Ingen förbrukning registrerad</td></tr>')+'</table></div>'+
+       '<div><b>Flak på plats</b><table style="width:100%;font-size:14px">'+r.sl.map((q,i)=>'<tr><td>Plats '+(i+1)+'</td><td>'+esc(F.fleet[flSlug(q.flak)]||flSlug(q.flak)||"–")+'</td><td class="r">'+Math.round(q.bar)+' bar</td></tr>').join("")+(r.x.store?'<tr><td>Lager</td><td></td><td class="r">'+Math.round(r.x.store.bar)+' bar</td></tr>':'')+'</table><p class="muted" style="font-size:13px;margin-top:8px">'+(r.x.device?esc(r.x.device)+' · ':'')+(r.x.temp!=null?r.x.temp+' °C · ':'')+esc(r.x.src||"")+'</p></div>'+
+       '<div><b>Kompressor (min / starter)</b><table style="width:100%;font-size:14px">'+Object.keys(rm).sort().slice(-7).reverse().map(d=>'<tr><td>'+esc(d.slice(5))+'</td><td class="r">'+(rm[d]||[]).join(" / ")+' min</td><td class="r muted">'+((stt[d]||[]).join(" / "))+' st</td></tr>').join("")+'</table></div></div></div>'}
+    return t}).join("")+'</div></div>';
+  /* flak: GPS */
+  const fr=mpFlakRows()||[];
+  if(fr.length){const loc=(S.fk&&S.fk.loc)||{};
+    h+='<div class="card"><div class="card-h"><h3>Flak: GPS</h3><span class="hint">'+fr.length+' flak med position · registrerad plats = appens flakminne</span></div><div style="overflow-x:auto"><table style="width:100%;font-size:14px;border-collapse:collapse"><tr style="text-align:left"><th>Flak</th><th>Läge</th><th>Nära</th><th>Registrerad plats</th><th>Position uppdaterad</th></tr>'+
+    fr.slice().sort((a,b)=>String(a.nr).localeCompare(String(b.nr),"sv",{numeric:true})).map(x=>{const L=loc[x.nr],old=!x.ts||Date.now()-x.ts>2*864e5,ST={standing:"står",moving:"rör sig",nodata:"ingen signal",driving:"kör"};
+      return '<tr style="border-top:1px solid #ddd"><td><b>'+esc(x.nr)+'</b></td><td>'+esc(ST[x.state]||x.state||"–")+'</td><td>'+(x.near?esc(x.near):'<a target="_blank" href="https://www.google.com/maps?q='+x.lat+','+x.lon+'">karta</a>')+'</td><td>'+(L?esc(typeof L==="object"?(L.plats||L.p||L.loc||""):L):'<span class="muted">–</span>')+'</td><td'+(old?' style="color:#b45309"':'')+'>'+(x.ts?esc(ago(x.ts)):'okänt')+'</td></tr>'}).join("")+'</table></div></div>'}
+  const mv=(F.pos.moves||[]).slice(0,12),hn=F.pos.hints||[];
+  const near=(la,lo)=>{let b="",bd=1e9;hn.forEach(q=>{const d=Math.hypot((q.lat-la)*111e3,(q.lng-lo)*62e3);if(d<bd){bd=d;b=q.a}});return bd<500?b:"okänd plats"};
+  if(mv.length)h+='<div class="card"><div class="card-h"><h3>Senaste flak-flyttar</h3></div><table style="width:100%;font-size:14px">'+mv.map(m=>'<tr><td><b>Flak '+esc(m.n)+'</b></td><td>'+esc(ago(Date.parse(m.at)))+'</td><td>'+esc(near(m.from[0],m.from[1]))+' → '+esc(near(m.to[0],m.to[1]))+'</td></tr>').join("")+'</table></div>';
+  const vs=F.pos.vehicles||[];
+  if(vs.length)h+='<div class="card"><div class="card-h"><h3>Fordon (Mapon)</h3></div><table style="width:100%;font-size:14px">'+vs.map(v=>'<tr><td><b>'+esc(v.n)+'</b></td><td>'+esc(v.state==="driving"?"kör"+(v.spd!=null?" "+v.spd+" km/h":""):v.state==="standing"?"står":v.state||"")+'</td><td>'+esc(v.addr||"")+'</td><td class="muted">'+esc(ago(Date.parse(v.t)))+'</td></tr>').join("")+'</table></div>';
   return h}
+document.addEventListener("click",e=>{const r=e.target.closest&&e.target.closest("[data-flopen]");if(!r||!S.bundle)return;const s=r.getAttribute("data-flopen");S.fl.open=S.fl.open===s?"":s;render()});
+setInterval(()=>{if(S.bundle&&S.bundle.role==="admin"&&S.view==="stat"&&document.visibilityState==="visible"&&navigator.onLine!==false){flLoad().then(()=>{if(S.view==="stat"&&!/INPUT|SELECT|TEXTAREA/.test((document.activeElement||{}).tagName||""))renderSoon()})}},60*1000);
+
+function renderStat(){
+  return '<div class="sx"><div class="pagehead"><h2>Stationer</h2><p class="muted">Flakplanering: tryck, förbrukning, flak och fordon, live från Flakplanering via Flak-synk.</p></div>'+renderStatLive()+'</div>'}
 function isOv(){return !!S.bundle&&(S.bundle.role==="admin"||S.bundle.role==="ekonomi")}
 S.view="ov";
 function tbl(head,rows,foot){return '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:15px"><thead><tr>'+head.map((h,i)=>'<th style="text-align:'+(i?'right':'left')+';padding:6px 8px;border-bottom:2px solid var(--line);white-space:nowrap">'+esc(h)+'</th>').join("")+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map((c,i)=>'<td style="text-align:'+(i?'right':'left')+';padding:6px 8px;border-bottom:1px solid var(--line)">'+esc(c)+'</td>').join("")+'</tr>').join("")+(foot?'<tr>'+foot.map((c,i)=>'<td style="text-align:'+(i?'right':'left')+';padding:6px 8px;font-weight:700">'+esc(c)+'</td>').join("")+'</tr>':'')+'</tbody></table></div>'}
@@ -2560,7 +2611,7 @@ function renderSum(){
    sec("Körningar med släp (appen)",O.trl.length?tbl(["Dag","Bil","Släp","Körn."],O.trl):'<p class="muted" style="margin:0">Inga.</p>')+
    sec("Rapporterat i appen per dag",tbl(["Datum","Bil","Förare","Släp","Körn.","Lossade","kg"],O.perDag.sort((a,b)=>a[0]<b[0]?1:-1))):"");
 }
-function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="mapon"?renderMapon():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v102</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v102 – skicka den här texten till mig.</div>'}}
+function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="mapon"?renderMapon():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v103</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v103 – skicka den här texten till mig.</div>'}}
 function renderAdmin(){
   const ds=days(),B=S.bundle;let h='<div class="pagehead"><h2>Översikt</h2><p class="muted">Dagens körningar, status från förarna och aviseringar.</p></div>';
   {const D=S.date||today(),cs=B.cars.filter(c=>c.days[D]);let nL=0,nU=0,nG=0;cs.forEach(c=>{const st=statesFor(c.dir,D);if(st.get("dag|godkand"))nG++;allLegs(c.dir,D,c.days[D].legs.map(l=>Object.assign({},l,{from:{name:l.from},to:{name:l.to}}))).filter(l=>!l.deleted).forEach(l=>{nL++;if(st.get(l.order+"|lossad"))nU++})});
