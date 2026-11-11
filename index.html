@@ -1919,9 +1919,11 @@ async function mpLoad(date){const st=S.bundle&&S.bundle.status;if(!st||!S.bundle
     const j=await r.json();if(!j.content){S.mp.docs[date]=false;S.mp.err[date]="";return}const c=j.content.replace(/\n/g,"");S.mp.docs[date]=await openPlan(unb64(c));S.mp.err[date]=""}
   catch(e){S.mp.err[date]="Kunde inte läsa Mapon-filen ("+((e&&e.message)||"nätverk")+")";if(S.mp.docs[date]===undefined)S.mp.docs[date]=null}}
 async function mpLoadFlak(){const st=S.bundle&&S.bundle.status;if(!st||!S.bundle.planKey||S.mp.fpBusy)return;S.mp.fpBusy=true;
-  try{const r=await fetch(GH+st.repo+"/contents/plan/_flakplan/all.json?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});
+  try{const r=await fetch(GH+st.repo+"/contents/plan/_flakplan?t="+Date.now(),{headers:ghHeaders(st),cache:"no-store"});
     if(r.status===404){S.mp.fp=false;return}if(!r.ok)throw new Error("Servern svarade "+r.status);
-    const j=await r.json();S.mp.fp=await openPlan(unb64(j.content.replace(/\n/g,"")));S.mp.fpErr=""}
+    /* filen är över 1 MB: contents-API:et ger då tomt innehåll, så hämta råbytes */
+    const rr=await fetch(GH+st.repo+"/contents/plan/_flakplan/all.json?t="+Date.now(),{headers:Object.assign(ghHeaders(st),{Accept:"application/vnd.github.raw+json"}),cache:"no-store"});if(!rr.ok)throw new Error("Servern svarade "+rr.status);
+    S.mp.fp=await openPlan(new Uint8Array(await rr.arrayBuffer()));S.mp.fpErr=""}
   catch(e){S.mp.fpErr="Kunde inte läsa flakdata ("+((e&&e.message)||"nätverk")+")"}finally{S.mp.fpBusy=false}}
 function mpUnit(doc,u){const E=doc&&doc.dygn&&doc.dygn.enheter&&doc.dygn.enheter[u.unit_id]||{},raw=u.raw||{};
   const km=a=>{const v=mpDfind(a,"mileage");return mpNum(v)};
@@ -2558,7 +2560,7 @@ function renderSum(){
    sec("Körningar med släp (appen)",O.trl.length?tbl(["Dag","Bil","Släp","Körn."],O.trl):'<p class="muted" style="margin:0">Inga.</p>')+
    sec("Rapporterat i appen per dag",tbl(["Datum","Bil","Förare","Släp","Körn.","Lossade","kg"],O.perDag.sort((a,b)=>a[0]<b[0]?1:-1))):"");
 }
-function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="mapon"?renderMapon():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v101</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v101 – skicka den här texten till mig.</div>'}}
+function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="mapon"?renderMapon():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v102</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v102 – skicka den här texten till mig.</div>'}}
 function renderAdmin(){
   const ds=days(),B=S.bundle;let h='<div class="pagehead"><h2>Översikt</h2><p class="muted">Dagens körningar, status från förarna och aviseringar.</p></div>';
   {const D=S.date||today(),cs=B.cars.filter(c=>c.days[D]);let nL=0,nU=0,nG=0;cs.forEach(c=>{const st=statesFor(c.dir,D);if(st.get("dag|godkand"))nG++;allLegs(c.dir,D,c.days[D].legs.map(l=>Object.assign({},l,{from:{name:l.from},to:{name:l.to}}))).filter(l=>!l.deleted).forEach(l=>{nL++;if(st.get(l.order+"|lossad"))nU++})});
