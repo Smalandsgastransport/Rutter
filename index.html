@@ -199,7 +199,8 @@ html.wide .top{flex-wrap:nowrap}
 html.wide .brand>div{padding-left:0}
 html.wide .shell{grid-template-columns:190px minmax(0,1fr);gap:20px}
 html.wide .side button{font-size:14px;padding:9px 12px}
-html.wide .btn{font-size:14px;min-height:36px;padding:6px 12px}
+@media (pointer:fine){html.wide .btn{font-size:14px;min-height:36px;padding:6px 12px}}
+@media (pointer:coarse){html.wide .btn{min-height:46px;padding:8px 14px}}
 html.wide .btn.big{min-height:44px;font-size:15px}
 html.wide .chip{font-size:14px;min-height:32px;padding:3px 12px}
 html.wide .card{padding:16px}
@@ -2415,7 +2416,7 @@ const FPCSS=`.fpx{font-family:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI'
 .fpx .mb{display:inline-block;width:56px;height:5px;background:var(--c2);border-radius:99px;margin-right:8px;vertical-align:middle;overflow:hidden}.fpx .mb i{display:block;height:100%;background:var(--ac2)}
 .fpx th{text-transform:uppercase;letter-spacing:.06em;font-size:10px;padding:8px}.fpx td{font-variant-numeric:tabular-nums}.fpx tr[data-fpcs]:hover td{background:var(--c2)}
 .fpx select{padding:8px 30px 8px 12px;border-radius:10px;min-width:210px}
-.fpx .nav button{font-weight:600}.fpx .nav button:hover{background:var(--c1)}.fpx .nav button[aria-current]:hover{background:var(--tx)}
+.fpx .nav button{font-weight:600}.fpx .nav button.syn{border:1px solid var(--ln);color:var(--ac);margin-right:8px}.fpx .nav button.syn:disabled{opacity:.6;cursor:default}.fpx .nav button:hover{background:var(--c1)}.fpx .nav button[aria-current]:hover{background:var(--tx)}
 @media(max-width:800px){.fpx .sp2{grid-template-columns:1fr}.fpx .tb .rng{margin-left:0;width:100%}}`;
 (function(){try{const st=document.createElement("style");st.textContent=FPCSS;document.head.appendChild(st)}catch(e){}})();
 S.fp={tab:"plan",tag:"",st:"",per:4,fv:"plats",q:"",need:"mon",cs:""};
@@ -2531,8 +2532,15 @@ const FPST={slut:["Slut enligt prognosen","red"],b24:["Byt inom 24 h","red"],b48
 const fpBarC=(b,su)=>b<=((su&&su.minBar)||20)?"red":b<((su&&su.lowBar)||80)?"yel":"grn";
 function fpAll(F){if(S.fp._k===F.updated&&S.fp._all&&S.fp._d===iso(new Date()))return S.fp._all;const a=Object.keys(F.status).filter(s=>!F.off[s]&&(F.setup[s]||{}).kind!=="produktion").map(s=>fpStation(F,s));S.fp._all=a;S.fp._k=F.updated;S.fp._d=iso(new Date());return a}
 function fpDaily(F,s){const c=F.cons[s]||{};return Object.keys(c).sort().map(d=>[d,c[d].kg])}
-function fpHead(F){const lt=Math.max.apply(null,Object.values(F.meta||{}).map(m=>m.lastT||0).concat([0]));const T=[["plan","Planering"],["station","Station"],["flak","Flak"],["cons","Förbrukning"],["data","Data"]];
-  return '<div class="hd"><div class="logo">S</div><div><h2 style="font-size:20px">Flakplanering</h2><div class="mu" style="font-size:11px">Förbrukning t.o.m. '+esc(lt?fpDt(lt):"–")+' · '+Object.keys(F.status).filter(s=>!F.off[s]).length+' stationer</div></div><div class="nav">'+T.map(t=>'<button data-fptab="'+t[0]+'"'+(S.fp.tab===t[0]?' aria-current="page"':'')+'>'+t[1]+'</button>').join("")+'</div></div>'}
+async function fpSyncNow(){const st=S.bundle&&S.bundle.status;if(!st||S.fp.sync&&S.fp.sync.busy)return;const before=S.fl.sha;S.fp.sync={busy:1,msg:"Startar hämtning …"};renderSoon();
+  try{const r=await fetch(GH+st.repo+"/actions/workflows/flak-sync.yml/dispatches",{method:"POST",headers:Object.assign({},ghHeaders(st),{"Content-Type":"application/json"}),body:JSON.stringify({ref:"main"})});
+    if(r.status!==204){S.fp.sync={busy:0,err:1,msg:(r.status===403||r.status===404||r.status===401)?"Nyckeln i appen får inte starta hämtningen. Den behöver behörigheten Actions: Read and write för rutt-status.":"Kunde inte starta hämtningen ("+r.status+")."};renderSoon();return}
+    S.fp.sync={busy:1,msg:"Hämtar nya avläsningar … (tar ca 30–60 sekunder)"};renderSoon();
+    for(let i=0;i<14;i++){await new Promise(z=>setTimeout(z,8000));await flLoad();if(S.fl.sha&&S.fl.sha!==before){S.fp.sync={busy:0,msg:"Klart, nya avläsningar hämtade."};renderSoon();return}}
+    S.fp.sync={busy:0,msg:"Hämtningen är startad men nya data syns inte än. Prova Uppdatera om en stund."}}
+  catch(e){S.fp.sync={busy:0,err:1,msg:"Kunde inte starta hämtningen (nätverk)."}}renderSoon()}
+function fpHead(F){const lt=Math.max.apply(null,Object.values(F.meta||{}).map(m=>m.lastT||0).concat([0])),rd=Math.max.apply(null,Object.values(F.status||{}).map(x=>Date.parse(x.reportedAt||x.savedAt||"")||0).concat([0])),sy=S.fp.sync||{};const T=[["plan","Planering"],["station","Station"],["flak","Flak"],["cons","Förbrukning"],["data","Data"]];
+  return '<div class="hd"><div class="logo">S</div><div><h2 style="font-size:20px">Flakplanering</h2><div class="mu" style="font-size:11px">'+(sy.msg?'<b style="color:'+(sy.err?'#f07a7a':'#4fc2a0')+'">'+esc(sy.msg)+'</b> · ':'')+'Förbrukning t.o.m. '+esc(lt?fpDt(lt):"–")+' · '+Object.keys(F.status).filter(s=>!F.off[s]).length+' stationer</div></div><div class="nav"><span class="mu" style="font-size:11px;margin-right:6px">'+(rd?'Senaste avläsning '+esc(ago(rd)):'')+'</span><button class="syn" data-fpsync="1"'+(sy.busy?' disabled':'')+'>'+(sy.busy?'Hämtar …':'↻ Hämta nu')+'</button>'+T.map(t=>'<button data-fptab="'+t[0]+'"'+(S.fp.tab===t[0]?' aria-current="page"':'')+'>'+t[1]+'</button>').join("")+'</div></div>'}
 /* ----- Planering ----- */
 function fpPlan(F){const all=fpAll(F),tags=[...new Set(all.map(a=>a.tag).filter(Boolean))],far=x=>x.sh&&x.sh.emptyAt!=null?x.sh.emptyAt:Infinity,list=all.filter(a=>!S.fp.tag||a.tag===S.fp.tag).slice().sort((a,b)=>a.rank-b.rank||far(a)-far(b)||(b.perDay||0)-(a.perDay||0));
   const n24=all.filter(a=>a.status==="b24"||a.status==="slut"),wc=all.filter(a=>a.swaps!=null),sum=wc.reduce((q,a)=>q+a.perDay,0),bytWeek=wc.reduce((q,a)=>q+a.swaps,0),perWk=wc.reduce((q,a)=>q+a.perWeek,0);
@@ -2642,7 +2650,7 @@ function renderStat(){const F=S.fl.slim;
   h+=fpHead(F)+(S.fl.err?'<div class="nt" style="color:#f07a7a">'+esc(S.fl.err)+'</div>':'');
   try{h+=S.fp.tab==="station"?fpStationTab(F):S.fp.tab==="flak"?fpFlakTab(F):S.fp.tab==="cons"?fpConsTab(F):S.fp.tab==="data"?fpDataTab(F):fpPlan(F)}catch(e){h+='<div class="nt" style="color:#f07a7a">Något gick fel i den här fliken: '+esc((e&&e.message)||String(e))+'<br>'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</div>'}
   return h+'</div>'}
-document.addEventListener("click",e=>{if(!S.bundle||S.view!=="stat")return;const t=e.target.closest&&e.target.closest("[data-fptab],[data-fptag],[data-fpgo],[data-fpneed],[data-fpfv],[data-fpper],[data-fpcs]");if(!t)return;
+document.addEventListener("click",e=>{if(!S.bundle||S.view!=="stat")return;const t=e.target.closest&&e.target.closest("[data-fptab],[data-fptag],[data-fpgo],[data-fpneed],[data-fpfv],[data-fpper],[data-fpcs],[data-fpsync]");if(!t)return;if(t.hasAttribute("data-fpsync")){fpSyncNow();return}
   if(t.hasAttribute("data-fptab"))S.fp.tab=t.getAttribute("data-fptab");else if(t.hasAttribute("data-fptag"))S.fp.tag=t.getAttribute("data-fptag");else if(t.hasAttribute("data-fpgo")){S.fp.st=t.getAttribute("data-fpgo");S.fp.tab="station"}else if(t.hasAttribute("data-fpneed"))S.fp.need=t.getAttribute("data-fpneed");else if(t.hasAttribute("data-fpfv"))S.fp.fv=t.getAttribute("data-fpfv");else if(t.hasAttribute("data-fpper"))S.fp.per=+t.getAttribute("data-fpper");else if(t.hasAttribute("data-fpcs"))S.fp.cs=t.getAttribute("data-fpcs");
   render()});
 document.addEventListener("change",e=>{const t=e.target;if(!t||S.view!=="stat")return;if(t.id==="fpSt"){S.fp.st=t.value;render()}else if(t.id==="fpCs"){S.fp.cs=t.value;render()}});
@@ -2825,7 +2833,7 @@ function renderSum(){
    sec("Körningar med släp (appen)",O.trl.length?tbl(["Dag","Bil","Släp","Körn."],O.trl):'<p class="muted" style="margin:0">Inga.</p>')+
    sec("Rapporterat i appen per dag",tbl(["Datum","Bil","Förare","Släp","Körn.","Lossade","kg"],O.perDag.sort((a,b)=>a[0]<b[0]?1:-1))):"");
 }
-function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="mapon"?renderMapon():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v110</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v110 – skicka den här texten till mig.</div>'}}
+function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="mapon"?renderMapon():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v112</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v112 – skicka den här texten till mig.</div>'}}
 function renderAdmin(){
   const ds=days(),B=S.bundle;let h='<div class="pagehead"><h2>Översikt</h2><p class="muted">Dagens körningar, status från förarna och aviseringar.</p></div>';
   {const D=S.date||today(),cs=B.cars.filter(c=>c.days[D]);let nL=0,nU=0,nG=0;cs.forEach(c=>{const st=statesFor(c.dir,D);if(st.get("dag|godkand"))nG++;allLegs(c.dir,D,c.days[D].legs.map(l=>Object.assign({},l,{from:{name:l.from},to:{name:l.to}}))).filter(l=>!l.deleted).forEach(l=>{nL++;if(st.get(l.order+"|lossad"))nU++})});
