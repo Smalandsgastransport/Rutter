@@ -281,6 +281,11 @@ details.mr-card[open]>summary{border-bottom:1px solid var(--line)}
 .mr-note{font-size:13.5px;padding:9px 12px;border-radius:7px;background:var(--blue-soft);color:var(--fg)}
 .mr-chip{font-size:12.5px;padding:2px 9px;border-radius:999px;background:var(--sunk);color:var(--fg);border:1px solid var(--line)}
 .mr-scroll{overflow-x:auto}
+
+.sup{display:flex;flex-direction:column;gap:12px;padding:10px 12px}.suptb{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.supseg{display:inline-flex;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px}.supseg button{background:none;border:0;font:inherit;font-weight:600;padding:7px 14px;border-radius:7px;cursor:pointer;color:inherit}.supseg button[aria-current]{background:var(--accent,#1f5fa8);color:#fff}
+#supSz{border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:var(--surface);color:inherit}
+.suphost{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}.supf{display:flex;flex-direction:column;gap:6px;min-width:0}.suphd{display:flex;gap:10px;align-items:center}.supclip{overflow:hidden;border:1px solid var(--line);border-radius:10px;background:#fff}.supbox iframe{width:100%;height:100%;border:0;background:#fff;display:block}
 </style>
 </head>
 <body>
@@ -416,6 +421,8 @@ const LOADS={full:"Fullt",tom:"Tomt",del:"Delvis"};
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}}};
 (function(){const of=window.fetch.bind(window);window.fetch=function(u,o){try{const url=typeof u==="string"?u:(u&&u.url)||"";const gh=url.indexOf("api.github.com")>=0,dt=/(^|\/)data\//.test(url);if(gh||dt){if(navigator.onLine===false)return Promise.reject(new TypeError("offline"));if(!(o&&o.signal)&&window.AbortSignal&&AbortSignal.timeout){o=Object.assign({},o,{signal:AbortSignal.timeout(gh?15000:25000)})}}}catch(e){}return of(u,o)}})();
 const S={cars:null,sess:null,key:null,bundle:null,date:null,offline:false,busy:false,pick:null,err:""};
+/* S.sup: appen körs som en förare inuti supportvyn (isolerad ruta). Då skickas aldrig GPS, push eller närvaro från supportenheten. */
+S.sup=(function(){try{return window.parent!==window&&(location.origin==="null"||location.hash==="#sup")}catch(e){return true}})();
 try{S.sess=JSON.parse(store.get("sess")||"null")}catch(e){}
 function iso(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
 const today=()=>iso(new Date());
@@ -448,6 +455,7 @@ async function loadBundle(){
   try{buf=await fetchBin("data/"+car.dir+"/rutt.bin");store.set("rutt:"+car.dir,b64(buf))}
   catch(e){const c=store.get("rutt:"+car.dir);if(!c)throw e;buf=unb64(c).buffer;S.offline=true}
   const json=JSON.parse(new TextDecoder().decode(await open(S.key,buf)));
+  if(json.role==="support"){S.bundle=json;S.key=S.key;return}
   const prev=S.bundle;S.bundle=json;S.basePlaces=(json.places||[]).slice();xpApply();pickDate();
   const r=route();if(r&&!isOv()){prefetch(car,r)}
 }
@@ -460,6 +468,7 @@ async function repoHead(){const st=S.bundle&&S.bundle.status;if(!st)return true;
 async function afterLoad(force){
   if(!S.bundle)return;
   if(window.ARKIV)return akLoad();
+  if(S.bundle.role==="support"){S.lastDay=today();return}
   if(force!==true&&S.lastDay===today()&&!(await repoHead())){if(S.bundle.role==="driver"&&pendingCount())await sync();return}
   S.lastDay=today();S.fresh=true;
   ensurePush();gpsInit();if(S.bundle.role==="admin"&&S.view==="map")loadPos().then(()=>renderSoon());loadFlak().then(()=>flushFlak()).then(()=>renderSoon()).catch(()=>{});loadPers().then(()=>renderSoon()).catch(()=>{});ejFlush().catch(()=>{});if(S.bundle.role==='admin')delLoad().then(()=>renderSoon()).catch(()=>{});loadXP().then(()=>renderSoon()).catch(()=>{});
@@ -1041,7 +1050,7 @@ async function histFetch(dir,dates){const todo=dates.filter(d=>!(store.get("hist
 /* förare: eget arkiv, sparas på enheten */
 const dkIdx=()=>{try{return JSON.parse(store.get("dkarch:"+S.bundle.dir)||"{}")}catch(e){return {}}};
 async function dkHist(){
-  if(S.dk.hbusy||!S.bundle||S.bundle.role!=="driver"||!S.bundle.planKey)return;S.dk.hbusy=true;
+  if(S.dk.hbusy||S.sup||!S.bundle||S.bundle.role!=="driver"||!S.bundle.planKey)return;S.dk.hbusy=true;
   try{await delLoad()}catch(e){}
   try{const dir=S.bundle.dir,ps=await fetchPlans(dir,"2020-01-01"),t=today(),idx=dkIdx();
     for(const d of Object.keys(ps).sort()){if(d>t||isTest(d))continue;const p=ps[d];if(!p.legs||!p.legs.length)continue;
@@ -1573,10 +1582,10 @@ async function flakSyncFromEvents(){
 /* ---------- GPS: surfplattans position -> kontoret (karta) ---------- */
 S.gp={wid:null,cur:null,sentTs:0,sentPos:null,sha:null,busy:false,err:"",perm:"",ok:null};S.pos={};S.mz=null;
 const gpDist=(a,b)=>{const R=6371e3,r=x=>x*Math.PI/180,dl=r(b.lat-a.lat),dn=r(b.lon-a.lon),h=Math.sin(dl/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h))};
-function gpsStart(){if(!navigator.geolocation||S.gp.wid!=null||!S.bundle||S.bundle.role!=="driver")return;
+function gpsStart(){if(S.sup||!navigator.geolocation||S.gp.wid!=null||!S.bundle||S.bundle.role!=="driver")return;
   try{S.gp.wid=navigator.geolocation.watchPosition(p=>{S.gp.cur={lat:+p.coords.latitude.toFixed(6),lon:+p.coords.longitude.toFixed(6),acc:Math.round(p.coords.accuracy||0),spd:p.coords.speed!=null?Math.round(p.coords.speed*3.6):null,hd:p.coords.heading!=null?Math.round(p.coords.heading):null,ts:p.timestamp||Date.now()};S.gp.err="";S.gp.perm="granted";gpsSend()},
     e=>{S.gp.err=e&&e.code===1?"denied":"fel";if(e&&e.code===1){S.gp.perm="denied";try{navigator.geolocation.clearWatch(S.gp.wid)}catch(x){}S.gp.wid=null}render()},{enableHighAccuracy:true,maximumAge:15000,timeout:40000})}catch(e){}}
-async function gpsInit(){if(!navigator.geolocation||!S.bundle||S.bundle.role!=="driver")return;
+async function gpsInit(){if(S.sup||!navigator.geolocation||!S.bundle||S.bundle.role!=="driver")return;
   try{if(navigator.permissions&&navigator.permissions.query){const q=await navigator.permissions.query({name:"geolocation"});S.gp.perm=q.state;q.onchange=()=>{S.gp.perm=q.state;if(q.state==="granted")gpsStart();render()};if(q.state==="granted")gpsStart()}}catch(e){}}
 async function gpsSend(){const g=S.gp,c=g.cur;if(!c||g.busy||!S.bundle||!S.bundle.status||!S.bundle.planKey)return;
   const now=Date.now(),moved=g.sentPos?gpDist(g.sentPos,c):1e9;if(now-g.sentTs<30000||(moved<80&&now-g.sentTs<300000))return;
@@ -2077,7 +2086,7 @@ const PUSH_KEY="BIfBO5M1Nzs7pMx6WSa9YUpJZYO2QvCn3POMUCaVwUTwmR_tPN7ehbKSeajWbg1Y
 const pm=dir=>S.bundle&&S.bundle.role==="admin"?"K:"+(dir||"all"):"F:";
 const u8k=b=>{const p="=".repeat((4-b.length%4)%4),r=atob((b+p).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(r,c=>c.charCodeAt(0))};
 async function ensurePush(){
-  try{if(!S.bundle||!S.bundle.status||!("PushManager" in window)||!("Notification" in window)||Notification.permission!=="granted"||!navigator.serviceWorker)return;
+  try{if(S.sup||!S.bundle||!S.bundle.status||!("PushManager" in window)||!("Notification" in window)||Notification.permission!=="granted"||!navigator.serviceWorker)return;
     const reg=await navigator.serviceWorker.ready;let sub=await reg.pushManager.getSubscription();
     if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8k(PUSH_KEY)});
     const k="pushreg:"+sub.endpoint.slice(-30),last=+store.get(k)||0;if(Date.now()-last<6048e5)return;
@@ -2833,7 +2842,7 @@ function renderSum(){
    sec("Körningar med släp (appen)",O.trl.length?tbl(["Dag","Bil","Släp","Körn."],O.trl):'<p class="muted" style="margin:0">Inga.</p>')+
    sec("Rapporterat i appen per dag",tbl(["Datum","Bil","Förare","Släp","Körn.","Lossade","kg"],O.perDag.sort((a,b)=>a[0]<b[0]?1:-1))):"");
 }
-function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="mapon"?renderMapon():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v112</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v112 – skicka den här texten till mig.</div>'}}
+function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="mapon"?renderMapon():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v113</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v113 – skicka den här texten till mig.</div>'}}
 function renderAdmin(){
   const ds=days(),B=S.bundle;let h='<div class="pagehead"><h2>Översikt</h2><p class="muted">Dagens körningar, status från förarna och aviseringar.</p></div>';
   {const D=S.date||today(),cs=B.cars.filter(c=>c.days[D]);let nL=0,nU=0,nG=0;cs.forEach(c=>{const st=statesFor(c.dir,D);if(st.get("dag|godkand"))nG++;allLegs(c.dir,D,c.days[D].legs.map(l=>Object.assign({},l,{from:{name:l.from},to:{name:l.to}}))).filter(l=>!l.deleted).forEach(l=>{nL++;if(st.get(l.order+"|lossad"))nU++})});
@@ -2872,6 +2881,29 @@ function renderSoon(){if(_rs)return;_rs=requestAnimationFrame(()=>{_rs=0;const a
     const y=window.scrollY,sc=[...m.querySelectorAll("*")].filter(e=>e.scrollTop>0||e.scrollLeft>0).map(e=>[e,e.scrollTop,e.scrollLeft]);
     const ids=sc.map(x=>x[0].id||x[0].className);d.set.call(m,v);
     if(y)window.scrollTo(0,y);sc.forEach(([e,t,l],i)=>{const n=e.id?document.getElementById(e.id):null;if(n){n.scrollTop=t;n.scrollLeft=l}})}})})();
+
+/* ---------- Support: växla mellan förarnas vyer, alla inloggade samtidigt ---------- */
+const SUPSZ={"tab-l":["Surfplatta liggande",1024,768],"tab-p":["Surfplatta stående",768,1024],"phone":["Telefon",390,844]};
+S.su={sel:"all",size:"tab-l",ready:{}};
+function supFit(){const h=$("#supHost");if(!h)return;const all=S.su.sel==="all",[,w,ht]=SUPSZ[S.su.size],n=(S.bundle.drivers||[]).length||1,aw=h.clientWidth-8,ah=Math.max(380,window.innerHeight-150);
+  const cols=all?Math.min(n,Math.max(1,Math.floor(aw/(w*0.42)))):1,cw=all?aw/cols-8:aw,sc=Math.min(1,cw/w,all?ah/ht*1.2:ah/ht);
+  h.querySelectorAll(".supf").forEach(f=>{const on=all||f.dataset.id===S.su.sel;f.style.display=on?"":"none";f.style.width=Math.round(w*sc)+"px";f.querySelector(".supbox").style.cssText="width:"+w+"px;height:"+ht+"px;transform:scale("+sc+");transform-origin:0 0";f.querySelector(".supclip").style.height=Math.round(ht*sc)+"px"})}
+function supSend(fr){const d=(S.bundle.drivers||[]).find(x=>x.id===fr.dataset.id);if(!d||!fr.contentWindow)return;fr.contentWindow.postMessage({t:"supLogin",user:d.user,pw:d.password},"*")}
+function supRender(M){
+  const D=S.bundle.drivers||[];
+  if(!$("#supHost")){
+    M.innerHTML='<div class="sup"><div class="suptb" id="supTb"></div><div id="supHost" class="suphost">'+D.map(d=>'<div class="supf" data-id="'+esc(d.id)+'"><div class="suphd"><b>'+esc(d.driver||d.name)+'</b><span class="mu">'+esc(d.name)+(d.reg?" · "+esc(d.reg):"")+'</span><button class="btn link" data-supre="'+esc(d.id)+'">Ladda om</button></div><div class="supclip"><div class="supbox"><iframe title="'+esc(d.driver||d.name)+'" sandbox="allow-scripts allow-forms allow-modals allow-popups allow-downloads" data-id="'+esc(d.id)+'" src="index.html#sup"></iframe></div></div></div>').join("")+'</div></div>';
+    M.querySelectorAll("iframe").forEach(fr=>fr.addEventListener("load",()=>supSend(fr)));
+    window.addEventListener("resize",supFit)}
+  $("#supTb").innerHTML='<div class="supseg">'+D.map(d=>'<button data-supsel="'+esc(d.id)+'"'+(S.su.sel===d.id?' aria-current="1"':'')+'>'+esc(d.driver||d.name)+'</button>').join("")+'<button data-supsel="all"'+(S.su.sel==="all"?' aria-current="1"':'')+'>Alla</button></div><select id="supSz">'+Object.entries(SUPSZ).map(([k,v])=>'<option value="'+k+'"'+(S.su.size===k?' selected':'')+'>'+v[0]+' '+v[1]+'×'+v[2]+'</option>').join("")+'</select><span class="mu" style="font-size:12px">Du ser och styr förarnas vyer live. Allt du gör sparas som förarens.</span>';
+  supFit()}
+document.addEventListener("click",e=>{const t=e.target.closest("[data-supsel],[data-supre]");if(!t||!S.bundle||S.bundle.role!=="support")return;
+  if(t.dataset.supsel){S.su.sel=t.dataset.supsel;supRender($("#main"))}
+  else{const fr=document.querySelector('iframe[data-id="'+t.dataset.supre+'"]');if(fr)fr.src="index.html#sup"}});
+document.addEventListener("change",e=>{if(e.target.id==="supSz"&&S.bundle&&S.bundle.role==="support"){S.su.size=e.target.value;supRender($("#main"))}});
+/* i förarrutan: ta emot inloggningen från supportvyn */
+if(S.sup)window.addEventListener("message",async e=>{const d=e.data;if(e.source!==window.parent||!d||d.t!=="supLogin"||S.sess)return;
+  for(let i=0;i<60&&!S.cars;i++)await new Promise(r=>setTimeout(r,250));if(S.cars)login(d.user,d.pw)});
 function render(){
   if(S.bundle&&S.bundle.role==="driver"&&!S.dk.busy)setTimeout(dkSync,50);
   readLast();readNt();readLv();readHf();readAc();readPe();if(S.bundle&&S.bundle.role==='admin'&&S.view==='msg')readMsg();if(S.bundle&&S.bundle.role==='admin'&&S.view==='plan')readPl();
@@ -2879,7 +2911,7 @@ function render(){
   $("#switch").hidden=!S.sess;$("#switch").textContent="Logga ut";
   $("#status").textContent=S.cars?((S.offline?"Utan nät – visar senast hämtade. ":"")+"Senast publicerad "+new Date(S.cars.updated).toLocaleString("sv-SE",{dateStyle:"short",timeStyle:"short"})+"."):"";
   if(!S.cars){$("#topbar").hidden=false;$("#sub").textContent="";M.innerHTML=S.busy?'<div class="card muted">Hämtar…</div>':'<div class="card">Kunde inte nå appen. Kontrollera nätet och tryck Uppdatera.</div>';return}
-  document.documentElement.classList.toggle("out",!S.sess);document.documentElement.classList.toggle("wide",isOv());
+  document.documentElement.classList.toggle("out",!S.sess);document.documentElement.classList.toggle("wide",isOv()||(S.bundle&&S.bundle.role==="support"));
   if(!S.sess){
     $("#topbar").hidden=true;$("#status").hidden=true;
     if(!M.querySelector("#loginForm")){
@@ -2898,6 +2930,7 @@ function render(){
    if(isDrv){$("#sub").textContent=(car.name||"")+(cp?" · "+cp[1]:(car.driver?" · "+car.driver:""));}}
   if(!(S.bundle&&S.bundle.role==="driver"))$("#sub").textContent=S.bundle&&S.bundle.role==="admin"?({ov:"Översikt",plan:"Planering",msg:"Meddelanden",paus:"Pauser",led:"Ledighet",ark:"Arkiv",fel:"Verkstad",ham:"Hämtningar",stat:"Stationer",sum:"Sammanställning",mil:"Milrapport",vec:"Veckovy"}[S.view]||"Översikt"):S.bundle&&S.bundle.role==="ekonomi"?"Sammanställning":(car.name||"");
   if(!S.bundle){M.innerHTML='<div class="card muted">'+(S.err?esc(S.err):'Hämtar rutten…')+'</div>';return}
+  if(S.bundle.role==="support"){supRender(M);return}
   if(isOv()){
     if(S.bundle.role==="ekonomi"){M.innerHTML='<div class="content">'+renderSum()+'</div>';return}
     const cnt=(S.bundle.planCars||[]).reduce((a,c)=>a+notisUnread(c.dir,today()).length+notisUnread(c.dir,iso(new Date(Date.now()+864e5))).length,0)+andringNek();
@@ -3188,7 +3221,7 @@ document.addEventListener("click",async e=>{
 document.addEventListener("keydown",e=>{if(e.key==="Escape")akClose()});
 document.addEventListener("input",e=>{if(e.target.id!=="akq")return;const q=e.target.value.trim().toLowerCase();document.querySelectorAll(".akrow").forEach(b=>b.hidden=!!q&&b.dataset.q.indexOf(q)<0)});
 
-if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+try{if(!S.sup&&"serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{})}catch(e){}
 (async function fastStart(){
   try{if(S.sess){const cars=JSON.parse(store.get("bilar")||"null");if(cars){S.cars=cars;S.offline=navigator.onLine===false;const car=carOf(S.sess.u),c=car&&store.get("rutt:"+car.dir);
     if(c){S.key=await deriveKey(S.sess.pw,car);const json=JSON.parse(new TextDecoder().decode(await open(S.key,unb64(c).buffer)));S.bundle=json;S.basePlaces=(json.places||[]).slice();xpApply();pickDate();await hydratePlans();cacheLoad();arRows();render()}}}}
