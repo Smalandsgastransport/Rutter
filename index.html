@@ -838,16 +838,16 @@ const planCar=()=>(S.bundle.planCars||[]).find(c=>c.id===S.pl.car)||{};
 const planKeyOf=()=>planCar().dir+"|"+S.pl.date;
 function plDraft(){
   const k=planKeyOf();
-  {const c=S.pl.drafts[k],b=S.plans[k];if(c&&b&&!c.dirty&&b.updated&&c.sent!==b.updated)delete S.pl.drafts[k]}
+  {const c=S.pl.drafts[k],b=S.plans[k];if(c&&b&&!c.dirty&&b.updated&&c.sent!==b.updated&&!(b.held&&b.held.length&&!(b.legs&&b.legs.length)))delete S.pl.drafts[k]}
   if(!S.pl.drafts[k]){let d=null;try{d=JSON.parse(store.get("pl:"+k)||"null")}catch(e){}
     const base=S.plans[k];if(base&&base.legs&&base.legs.length)base.sent=base.updated;
     /* ett gammalt lokalt utkast får aldrig dölja det som faktiskt är utskickat: använd det bara för osparade ändringar på samma version */
-    if(d&&base&&(!d.dirty||(d.baseUpd&&d.baseUpd!==base.updated))){if(d.dirty)setTimeout(()=>toast("Planeringen för "+dayLabel(S.pl.date).toLowerCase()+" ändrades av någon annan. Dina osparade ändringar kasserades."),300);d=null;store.set("pl:"+k,null)}
+    if(d&&base&&((!d.dirty&&!(base.held&&d.baseUpd===base.updated))||(d.baseUpd&&d.baseUpd!==base.updated))){if(d.dirty)setTimeout(()=>toast("Planeringen för "+dayLabel(S.pl.date).toLowerCase()+" ändrades av någon annan. Dina osparade ändringar kasserades."),300);d=null;store.set("pl:"+k,null)}
     let imp=null;if(!d&&!base){const oc=S.bundle.cars.find(x=>x.dir===planCar().dir),od=oc&&oc.days&&oc.days[S.pl.date];
       if(od&&od.legs&&od.legs.length){const pre=S.pl.date.slice(2).replace(/-/g,"")+"-B"+String(S.pl.car).replace(/\D/g,"")+"-";
         imp={date:S.pl.date,car:S.pl.car,carName:planCar().name,driver:od.driver||planCar().driver||"",trailer:od.trailer||planCar().trailer||"",reg:od.reg||planCar().reg||"",next:od.legs.length+1,sent:od.updated||Date.now(),dirty:false,imported:true,
           legs:od.legs.map(l=>{const fo=l.fromO&&l.fromO.name?l.fromO:{name:l.from},to=l.toO&&l.toO.name?l.toO:{name:l.to};return {order:l.order,uppdrag:l.uppdrag,load:l.load,antal:l.antal,mangd:l.mangd,note:l.note||"",from:fo,to:to}})}}}
-    S.pl.drafts[k]=d||imp||(base?JSON.parse(JSON.stringify(base)):{date:S.pl.date,car:S.pl.car,carName:planCar().name,driver:planCar().driver||"",trailer:planCar().trailer||"",reg:planCar().reg||"",legs:[],next:1,sent:null,dirty:false})}
+    S.pl.drafts[k]=d||imp||(base?(()=>{const x=JSON.parse(JSON.stringify(base));if(x.held&&x.held.length&&!(x.legs&&x.legs.length)){x.legs=x.held;x.sent=null;x.baseUpd=base.updated}delete x.held;return x})():{date:S.pl.date,car:S.pl.car,carName:planCar().name,driver:planCar().driver||"",trailer:planCar().trailer||"",reg:planCar().reg||"",legs:[],next:1,sent:null,dirty:false})}
   return S.pl.drafts[k]}
 function plInfo(c){const k=c.dir+"|"+S.pl.date;let d=S.pl.drafts[k];if(!d){try{d=JSON.parse(store.get("pl:"+k)||"null")}catch(e){}}if(!d)d=S.plans[k];
   return {driver:(d&&d.driver)||c.driver||"",reg:(d&&d.reg)||c.reg||"",trailer:(d&&d.trailer)||c.trailer||"",n:d&&d.legs?d.legs.length:0,sent:!!(d&&d.sent)}}
@@ -916,8 +916,8 @@ async function plMoveDay(from,to){
   return jobs.length}
 async function plSend(retract){
   const D=plDraft(),car=planCar();readPl();
-  const out=Object.assign({},D,{legs:retract?[]:D.legs,updated:new Date().toISOString(),company:S.bundle.company||"Småländska Bränslen AB",dDate:S.pl.date});
-  try{await ghPlanPut(car.dir,S.pl.date,out);S.plans[planKeyOf()]=out;D.sent=retract?null:out.updated;D.dirty=false;D.baseUpd=out.updated;if(retract)D.legs=D.legs;store.set("pl:"+planKeyOf(),JSON.stringify(D));
+  const out=Object.assign({},D,{legs:retract?[]:D.legs,held:retract?JSON.parse(JSON.stringify(D.legs||[])):undefined,updated:new Date().toISOString(),company:S.bundle.company||"Småländska Bränslen AB",dDate:S.pl.date});
+  try{await ghPlanPut(car.dir,S.pl.date,out);S.plans[planKeyOf()]=out;D.sent=retract?null:out.updated;D.dirty=false;D.baseUpd=out.updated;if(!retract)delete out.held;if(!retract)delete D.held;store.set("pl:"+planKeyOf(),JSON.stringify(D));
     const c=S.bundle.cars.find(x=>x.dir===car.dir);if(c){if(retract)delete c.days[S.pl.date];else c.days[S.pl.date]=ovDay(out)}
     toast(retract?"Rutten är tillbakatagen.":"Utskickad till "+((D.driver||"").split(" ")[0]||"bilen")+".")}
   catch(e){toast("Kunde inte skicka. Kontrollera nätet och försök igen.")}
@@ -2962,7 +2962,7 @@ function renderSum(){
    sec("Körningar med släp (appen)",O.trl.length?tbl(["Dag","Bil","Släp","Körn."],O.trl):'<p class="muted" style="margin:0">Inga.</p>')+
    sec("Rapporterat i appen per dag",tbl(["Datum","Bil","Förare","Släp","Körn.","Lossade","kg"],O.perDag.sort((a,b)=>a[0]<b[0]?1:-1))):"");
 }
-function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="mapon"?renderMapon():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():S.view==="trash"?renderTrash():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v116</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v113 – skicka den här texten till mig.</div>'}}
+function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="mapon"?renderMapon():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():S.view==="trash"?renderTrash():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v117</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v113 – skicka den här texten till mig.</div>'}}
 function renderAdmin(){
   const ds=days(),B=S.bundle;let h='<div class="pagehead"><h2>Översikt</h2><p class="muted">Dagens körningar, status från förarna och aviseringar.</p></div>';
   {const D=S.date||today(),cs=B.cars.filter(c=>c.days[D]);let nL=0,nU=0,nG=0;cs.forEach(c=>{const st=statesFor(c.dir,D);if(st.get("dag|godkand"))nG++;allLegs(c.dir,D,c.days[D].legs.map(l=>Object.assign({},l,{from:{name:l.from},to:{name:l.to}}))).filter(l=>!l.deleted).forEach(l=>{nL++;if(st.get(l.order+"|lossad"))nU++})});
