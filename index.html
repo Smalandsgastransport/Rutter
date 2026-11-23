@@ -1343,6 +1343,9 @@ function flushFlak(){
   const p=run().then(()=>{if(S.fk.p===p)S.fk.p=null});S.fk.p=p;return p}
 const SLOTS={"Påfyllning Alvesta":["Plats 1","Plats 2","Plats 3","Plats 4","Plats 5","Plats 6","Plats 7","Plats 8","Trailer 5","Buffert"],
   "Påfyllning Målilla":["Målilla 1","Målilla 2","Farmen (Hagelsrum) 1","Farmen (Hagelsrum) 2","Farmen (Hagelsrum) 3","Buffert"],"Påfyllning Sävsjö":["Plats 1","Plats 2","Buffert"],"Påfyllning Jönköping":["Plats 1","Plats 2","Buffert"]};
+const BUF0="Buffert";
+/* alla stationer får flakplatser: 3 som standard, Ljungby Karlsrovägen 4 och Hammerdalsvägen 10 har 5 */
+function slotsInit(){((S.bundle&&S.bundle.places)||[]).forEach(p=>{if((p.kind==="station"||p.kind==="fyll")&&p.name&&!SLOTS[p.name]){const n=/karlsrov/i.test(p.name)?4:/hammerdal/i.test(p.name)?5:3;SLOTS[p.name]=Array.from({length:n},(_,i)=>"Plats "+(i+1)).concat([BUF0])}})}
 const BUF="Buffert",slotCnt=pl=>SLOTS[pl].filter(k=>k!==BUF).length;
 const slotOf=n=>((S.fk.loc||{})[n]||{}).slot||"";
 function slotMap(place){const m={};Object.keys(S.fk.loc||{}).forEach(n=>{const v=S.fk.loc[n]||{};if(v.p===place&&v.slot)(m[v.slot]=m[v.slot]||[]).push(n)});return m}
@@ -1810,7 +1813,7 @@ async function loadXP(){if(!S.bundle||!S.bundle.planKey||!S.bundle.status)return
 /* inbyggda platser som saknar riktig adress i grunddatan; ersätts när kontoret lägger till samma namn med adress */
 const DEFP=[{id:"almhult",name:"Älmhult",street:"Äskya 1",zip:"343 90",city:"Älmhult",kind:"station",std:1}];
 function xpApply(){if(!S.basePlaces||!S.bundle)return;const ids=new Set(S.basePlaces.map(p=>p.id)),xs=(S.xp||[]).filter(p=>!ids.has(p.id)),nm=new Set(S.basePlaces.concat(xs).map(p=>String(p.name||"").toLowerCase()));
-  S.bundle.places=S.basePlaces.concat(xs).concat(DEFP.filter(d=>!nm.has(d.name.toLowerCase())))}
+  S.bundle.places=S.basePlaces.concat(xs).concat(DEFP.filter(d=>!nm.has(d.name.toLowerCase())));slotsInit()}
 const placeNoAddr=()=>(S.bundle.places||[]).filter(p=>p.std&&!p.street);
 async function xpSave(mut){const st=S.bundle.status;
   for(let i=0;i<4;i++){await loadXP();mut(S.xp);const body={message:pm("all"),content:b64(await sealPlan(S.xp))};if(S.xpSha)body.sha=S.xpSha;
