@@ -1677,7 +1677,7 @@ const persDup=(list,x)=>{const dg=v=>String(v||"").replace(/\D/g,""),m=v=>String
 function renderPers(){
   const P=S.pe,list=(S.pers.list||[]).slice().sort((a,b)=>(a.namn||"").localeCompare(b.namn||"","sv")),q=P.q.trim().toLowerCase();
   const inp='style="font:inherit;font-size:16px;padding:9px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg);width:100%"';
-  let h='<div class="pagehead"><h2>Personal</h2><p class="muted">Chaufförer, anställda och andra kontakter. Lägg inte in personnummer eller lösenord här – listan kan läsas av appens inloggningar.</p></div>';
+  let h='<div class="pagehead"><h2>Kontakter</h2><p class="muted">Chaufförer, anställda och andra kontakter. Lägg inte in personnummer eller lösenord här – listan kan läsas av appens inloggningar.</p></div>';
   if(S.pers.st&&!S.pers.st.ok)h+='<div class="notice warn">⚠ '+esc(S.pers.st.msg)+'</div>';
   if(P.msg)h+='<div class="notice">'+esc(P.msg)+'</div>';
   if(S.pers.ok&&!P.seedDone&&!P.seedNone){if(P.seed===undefined&&!P.seedBusy){P.seedBusy=true;fetch("data/kontakter-seed.bin",{cache:"no-store"}).then(async r=>{if(!r.ok)throw 0;P.seed=(await openPlan(new Uint8Array(await r.arrayBuffer()))).filter(x=>x&&x.namn)}).catch(()=>{P.seedNone=true;P.seed=null}).finally(()=>{P.seedBusy=false;render()})}
@@ -3081,7 +3081,7 @@ function render(){
   if(isOv()){
     if(S.bundle.role==="ekonomi"){M.innerHTML='<div class="content">'+renderSum()+'</div>';return}
     const cnt=(S.bundle.planCars||[]).reduce((a,c)=>a+notisUnread(c.dir,today()).length+notisUnread(c.dir,iso(new Date(Date.now()+864e5))).length,0)+andringNek();
-    const items=[["ov","Översikt",cnt],["plan","Planering",0],["msg","Meddelanden",0],["stat","Stationer",0],["paus","Pauser",0],["ham","Hämtningar",hmOpen()],["fel","Verkstad",felNy()],["ark","Arkiv",(S.ar.rows||[]).filter(x=>x.ok===false&&!lockGet(x.dir,x.date,x.leg.order)).length+Object.keys(S.dl.d||{}).filter(k=>S.dl.d[k].st==="beg").length],["map","Karta",0],["mapon","Mapon",0],["flk","Flak",0],["pers","Personal",0],["led","Ledighet",S.led.filter(x=>x.status==="ny").length],["vec","Vecka",0],["mil","Milrapport",0],["sum","Sammanställning",0],["trash","Papperskorg",(S.tr.a||[]).length]];
+    const items=[["ov","Översikt",cnt],["plan","Planering",0],["msg","Meddelanden",0],["stat","Stationer",0],["paus","Pauser",0],["ham","Hämtningar",hmOpen()],["fel","Verkstad",felNy()],["ark","Arkiv",(S.ar.rows||[]).filter(x=>x.ok===false&&!lockGet(x.dir,x.date,x.leg.order)).length+Object.keys(S.dl.d||{}).filter(k=>S.dl.d[k].st==="beg").length],["map","Karta",0],["mapon","Mapon",0],["flk","Flak",0],["pers","Kontakter",0],["led","Ledighet",S.led.filter(x=>x.status==="ny").length],["vec","Vecka",0],["mil","Milrapport",0],["sum","Sammanställning",0],["trash","Papperskorg",(S.tr.a||[]).length]];
     const nav='<nav class="side"><div class="sidehd">Kontoret</div>'+items.map(([k,l,n])=>'<button data-view="'+k+'"'+(S.view===k?' aria-current="page"':'')+'><span>'+l+'</span>'+(n?'<i class="badge">'+n+'</i>':'')+'</button>').join("")+'</nav>';
     M.innerHTML='<div class="shell">'+nav+'<div class="content">'+slotAlarm()+adminView()+'</div></div>';return}
   const ds=days();let h=alertsHtml()+startBar()+gpsCard();
