@@ -1118,7 +1118,7 @@ async function dkHist(){
 function dagslutE(dir,date){return statesFor(dir,date).get('dag|dagslut')||null}
 function dagslutBtn(){const e=dagslutE(S.bundle.dir,today());return e?'<span class="pill p-full">Dagen avslutad '+esc(hhmm(e.ts))+'</span>':'<button class="btn go" data-dk="dagslut">Avsluta dagen och skicka in godsdeklarationer</button>'}
 function dkCount(){const dir0=S.bundle.dir,idx0=dkIdx();return Object.keys(idx0).filter(k=>["ok","adm"].indexOf(DL(k).st)<0&&!(kordGet(dir0,idx0[k].date,idx0[k].order)===false&&lockGet(dir0,idx0[k].date,idx0[k].order))).length}
-function arkCard(){return arkCard0()+flakCard()}
+function arkCard(){return arkCard0()+flakCard()+kontCard()}
 function arkCard0(){
   if(!(S.bundle&&S.bundle.role==="driver"))return "";const n=S.dk.fresh?dkCount():(+store.get("dkn:"+S.bundle.dir)||dkCount());
   return '<div class="card" style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div><b>Mina körda deklarationer</b><div class="muted" style="font-size:14px">'+n+' sparade på den här enheten</div></div><span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-dk="arch">Öppna arkivet</button>'+dagslutBtn()+'</span></div>'}
@@ -1569,6 +1569,24 @@ document.addEventListener("click",async e=>{const t=e.target.closest("[data-fv]"
   if(t.dataset.fv==="close"){const o=document.getElementById("fkview");if(o)o.remove();return}
   if(t.dataset.fv==="open"){S.fkq="";flakView();await Promise.all([loadFlak(),loadTvatt()]);tvFlush();flakView()}});
 document.addEventListener("input",e=>{if(e.target.id==="fkq"){S.fkq=e.target.value;flakView()}});
+/* ---------- Kontaktlista för förarna (skrivskyddad, samma lista som admin Personal) ---------- */
+S.kq="";S.kr="alla";
+function kontCard(){if(!(S.bundle&&S.bundle.role==="driver"&&S.bundle.planKey))return "";
+  return '<div class="card" style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div><b>Kontakter</b><div class="muted" style="font-size:14px">'+(S.pers.list||[]).filter(x=>x.akt!==false).length+' personer, stationer och snöröjning</div></div><button class="btn" data-kv="open">Öppna kontakter</button></div>'}
+function kontView(){
+  const old=document.getElementById("kview");if(old)old.remove();const q=(S.kq||"").trim().toLowerCase(),all=(S.pers.list||[]).filter(x=>x.akt!==false).sort((a,b)=>(a.namn||"").localeCompare(b.namn||"","sv"));
+  const vis=all.filter(x=>(S.kr==="alla"||x.roll===S.kr)&&(!q||[x.namn,x.tel,x.mail,x.roll,x.bil,x.not].join(" ").toLowerCase().indexOf(q)>=0));
+  const o=document.createElement("div");o.id="kview";o.style.cssText="position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column;padding:12px;gap:10px;overflow:auto";
+  o.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:19px">Kontakter</b><button class="btn" data-kv="close">Stäng</button></div>'+
+    '<div class="chips">'+["alla"].concat(ROLLER).map(r=>'<button class="chip" data-kv="roll" data-k="'+esc(r)+'"'+(S.kr===r?' aria-current="date"':'')+'>'+(r==="alla"?"Alla":esc(r))+' <span>'+(r==="alla"?all.length:all.filter(x=>x.roll===r).length)+'</span></button>').join("")+'</div>'+
+    '<input id="kq" value="'+esc(S.kq||"")+'" placeholder="Sök namn, telefon…" style="font:inherit;font-size:17px;padding:10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg)">'+
+    (vis.length?vis.map(x=>'<div class="card"><b style="font-size:18px">'+esc(x.namn)+'</b> <span class="pill p-type">'+esc(x.roll||"")+'</span><div style="margin-top:6px;font-size:16px;display:flex;flex-direction:column;gap:4px">'+(x.tel?'<span>📞 <a href="tel:'+esc(x.tel.replace(/[^+0-9]/g,""))+'">'+esc(x.tel)+'</a></span>':'')+(x.mail?'<span>✉ <a href="mailto:'+esc(x.mail)+'">'+esc(x.mail)+'</a></span>':'')+(x.not?'<span class="muted">'+esc(x.not).replace(/\n/g,"<br>")+'</span>':'')+'</div></div>').join(""):'<div class="card muted">'+(all.length?'Inga träffar.':'Inga kontakter inlagda än.')+'</div>');
+  document.body.appendChild(o);const i=document.getElementById("kq");if(q&&i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}}
+document.addEventListener("click",async e=>{const t=e.target.closest("[data-kv]");if(!t)return;const a=t.dataset.kv;
+  if(a==="close"){const o=document.getElementById("kview");if(o)o.remove();return}
+  if(a==="roll"){S.kr=t.dataset.k;kontView();return}
+  if(a==="open"){S.kq="";S.kr="alla";kontView();try{await loadPers()}catch(x){}kontView()}});
+document.addEventListener("input",e=>{if(e.target.id==="kq"){S.kq=e.target.value;kontView()}});
 /* ---------- Tvätt av flak: förarna och kontoret loggar datum, så vi vet hur länge sedan varje flak tvättades ---------- */
 const TVP="plan/_tvatt/all.json";S.tv={d:{},sha:null,ok:false,err:"",arm:null};S.tvf={nr:"",d:"",msg:"",all:false,busy:false};
 const tvQ=()=>{try{return JSON.parse(store.get("tvq")||"[]")}catch(e){return []}};
@@ -1630,7 +1648,7 @@ document.addEventListener("click",async e=>{const t=e.target.closest("[data-tv],
   if(t.dataset.tvdel&&S.bundle.role==="admin"){const k=t.dataset.tvdel;if(S.tv.arm!==k){S.tv.arm=k;redraw();return}S.tv.arm=null;const [n,ts]=[k.split("|")[0],+k.split("|")[1]];
     try{await saveTvatt(d=>{d[n]=(d[n]||[]).filter(x=>x.ts!==ts);if(!d[n].length)delete d[n]});toast("Registreringen togs bort.")}catch(err){toast("Gick inte: "+err.message)}redraw()}});
 /* ---------- Personal: chaufförer, anställda och andra kontakter ---------- */
-const PEP="plan/_personal/all.json",ROLLER=["Chaufför","Kontor","Verkstad","Kund / station","Annan"];
+const PEP="plan/_personal/all.json",ROLLER=["Chaufför","Kontor","Verkstad","Kund / station","Snöröjning","Annan"];
 S.pers={list:[],sha:null,ok:false,st:null};S.pe={q:"",roll:"alla",f:null,msg:"",del:null};
 async function loadPers(){
   if(!S.bundle||!S.bundle.planKey||!S.bundle.status)return false;
@@ -2971,7 +2989,7 @@ function renderSum(){
    sec("Körningar med släp (appen)",O.trl.length?tbl(["Dag","Bil","Släp","Körn."],O.trl):'<p class="muted" style="margin:0">Inga.</p>')+
    sec("Rapporterat i appen per dag",tbl(["Datum","Bil","Förare","Släp","Körn.","Lossade","kg"],O.perDag.sort((a,b)=>a[0]<b[0]?1:-1))):"");
 }
-function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="mapon"?renderMapon():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():S.view==="trash"?renderTrash():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v119</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v113 – skicka den här texten till mig.</div>'}}
+function adminView(){try{return (S.view==="vec"?renderVec():S.view==="mil"?renderMil():S.view==="sum"?renderSum():S.view==="plan"?renderPlan():S.view==="msg"?renderMsg():S.view==="ham"?renderHamt():S.view==="fel"?renderFel():S.view==="mapon"?renderMapon():S.view==="ark"?renderArk():S.view==="map"?renderMap():S.view==="flk"?renderFlak():S.view==="pers"?renderPers():S.view==="led"?renderLed():S.view==="paus"?renderPaus():S.view==="stat"?renderStat():S.view==="trash"?renderTrash():renderAdmin())+'<div class="muted" style="font-size:11px;margin-top:20px">Version v120</div>'}catch(e){return '<div class="notice warn"><b>Något gick fel i den här vyn:</b> '+esc((e&&e.message)||String(e))+'<br><span style="font-size:12px">'+esc(String((e&&e.stack)||"").split("\n").slice(0,3).join(" | "))+'</span><br>Version v113 – skicka den här texten till mig.</div>'}}
 function renderAdmin(){
   const ds=days(),B=S.bundle;let h='<div class="pagehead"><h2>Översikt</h2><p class="muted">Dagens körningar, status från förarna och aviseringar.</p></div>';
   {const D=S.date||today(),cs=B.cars.filter(c=>c.days[D]);let nL=0,nU=0,nG=0;cs.forEach(c=>{const st=statesFor(c.dir,D);if(st.get("dag|godkand"))nG++;allLegs(c.dir,D,c.days[D].legs.map(l=>Object.assign({},l,{from:{name:l.from},to:{name:l.to}}))).filter(l=>!l.deleted).forEach(l=>{nL++;if(st.get(l.order+"|lossad"))nU++})});
