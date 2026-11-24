@@ -1345,7 +1345,7 @@ const SLOTS={"Påfyllning Alvesta":["Plats 1","Plats 2","Plats 3","Plats 4","Pla
   "Påfyllning Målilla":["Målilla 1","Målilla 2","Farmen (Hagelsrum) 1","Farmen (Hagelsrum) 2","Farmen (Hagelsrum) 3","Buffert"],"Påfyllning Sävsjö":["Plats 1","Plats 2","Buffert"],"Påfyllning Jönköping":["Plats 1","Plats 2","Buffert"]};
 const BUF0="Buffert";
 /* alla stationer får flakplatser: 3 som standard, Ljungby Karlsrovägen 4 och Hammerdalsvägen 10 har 5 */
-function slotsInit(){((S.bundle&&S.bundle.places)||[]).forEach(p=>{if((p.kind==="station"||p.kind==="fyll")&&p.name&&!SLOTS[p.name]){const n=/karlsrov/i.test(p.name)?4:/hammerdal/i.test(p.name)?5:3;SLOTS[p.name]=Array.from({length:n},(_,i)=>"Plats "+(i+1)).concat([BUF0])}})}
+function slotsInit(){((S.bundle&&S.bundle.places)||[]).forEach(p=>{if((p.kind==="station"||p.kind==="fyll")&&p.name&&!SLOTS[p.name]){const nm=p.name+" "+(p.street||""),n=/karlsro/i.test(nm)?4:/hammerdal/i.test(nm)?5:3;SLOTS[p.name]=Array.from({length:n},(_,i)=>"Plats "+(i+1)).concat([BUF0])}})}
 const BUF="Buffert",slotCnt=pl=>SLOTS[pl].filter(k=>k!==BUF).length;
 const slotOf=n=>((S.fk.loc||{})[n]||{}).slot||"";
 function slotMap(place){const m={};Object.keys(S.fk.loc||{}).forEach(n=>{const v=S.fk.loc[n]||{};if(v.p===place&&v.slot)(m[v.slot]=m[v.slot]||[]).push(n)});return m}
