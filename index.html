@@ -1677,6 +1677,36 @@ const persIdx=(list,x)=>{const dg=v=>String(v||"").replace(/\D/g,""),m=v=>String
 const persFill=(y,x)=>["tel","mail","not","bil"].filter(f=>x[f]&&!String(y[f]||"").trim());
 const persTodo=(list,seed)=>({nw:seed.filter(x=>persIdx(list,x)<0),up:seed.filter(x=>{const i=persIdx(list,x);return i>=0&&persFill(list[i],x).length})});
 const persDup=(list,x)=>{const dg=v=>String(v||"").replace(/\D/g,""),m=v=>String(v||"").trim().toLowerCase(),n=v=>m(v).replace(/\s+/g," ");return list.some(y=>(dg(x.tel)&&dg(y.tel)===dg(x.tel))||(m(x.mail)&&m(y.mail)===m(x.mail))||n(y.namn)===n(x.namn))};
+/* Import av Excel (.xlsx) med snöröjare: läses i webbläsaren, priser tas inte med */
+async function xlsxRows(file){
+  const u=new Uint8Array(await file.arrayBuffer()),dv=new DataView(u.buffer);let e=-1;for(let i=u.length-22;i>=0;i--){if(dv.getUint32(i,true)===0x06054b50){e=i;break}}if(e<0)throw new Error("Det här är inte en .xlsx-fil");
+  const n=dv.getUint16(e+10,true);let o=dv.getUint32(e+16,true);const ent={};
+  for(let i=0;i<n;i++){const m=dv.getUint16(o+10,true),cs=dv.getUint32(o+20,true),nl=dv.getUint16(o+28,true),xl=dv.getUint16(o+30,true),cl=dv.getUint16(o+32,true),lo=dv.getUint32(o+42,true),nm=new TextDecoder().decode(u.slice(o+46,o+46+nl));ent[nm]={m,cs,lo};o+=46+nl+xl+cl}
+  const rd=async nm=>{const z=ent[nm];if(!z)return null;const nl=dv.getUint16(z.lo+26,true),xl=dv.getUint16(z.lo+28,true),d=u.slice(z.lo+30+nl+xl,z.lo+30+nl+xl+z.cs);
+    if(z.m===0)return new TextDecoder().decode(d);const ds=new Blob([d]).stream().pipeThrough(new DecompressionStream("deflate-raw"));return new TextDecoder().decode(await new Response(ds).arrayBuffer())};
+  const dp=new DOMParser(),ss=[],sx=await rd("xl/sharedStrings.xml");
+  if(sx)[...dp.parseFromString(sx,"text/xml").getElementsByTagName("si")].forEach(si=>ss.push([...si.getElementsByTagName("t")].map(t=>t.textContent).join("")));
+  const wx=await rd("xl/worksheets/sheet1.xml");if(!wx)throw new Error("Hittar inget kalkylblad");
+  const rows=[];[...dp.parseFromString(wx,"text/xml").getElementsByTagName("row")].forEach(r=>{const o={};[...r.getElementsByTagName("c")].forEach(c=>{const ref=c.getAttribute("r")||"",col=ref.replace(/\d/g,""),t=c.getAttribute("t"),v=c.getElementsByTagName("v")[0],is=c.getElementsByTagName("is")[0];let x=null;
+      if(t==="s"&&v)x=ss[+v.textContent];else if(t==="inlineStr"&&is)x=[...is.getElementsByTagName("t")].map(q=>q.textContent).join("");else if(v)x=t==="str"?v.textContent:(isNaN(+v.textContent)?v.textContent:+v.textContent);if(x!==null&&x!=="")o[col]=x});rows.push(o)});
+  return rows}
+function snoKontakter(rows){
+  const hi=rows.findIndex(r=>Object.values(r).some(v=>/^f(ö|o)retag$/i.test(String(v).trim())));if(hi<0)throw new Error('Hittar ingen kolumn "Företag"');
+  const col=re=>{const h=rows[hi];return Object.keys(h).find(k=>re.test(String(h[k]).trim()))},cM=col(/^mack$/i),cF=col(/^f(ö|o)retag$/i),cT=col(/^tel/i),cE=col(/^(mejl|e-?post|mail)/i);
+  const em=v=>{const m=String(v||"").match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/);return m?m[0]:""};
+  const tel=v=>{if(v==null||v==="")return"";if(typeof v==="number"){let d=String(Math.round(v));if(d[0]!=="0")d="0"+d;return /^07\d{8}$/.test(d)?d.slice(0,3)+"-"+d.slice(3,6)+" "+d.slice(6,8)+" "+d.slice(8):d.slice(0,4)+"-"+d.slice(4)}return String(v).trim()};
+  const out=[],by={};
+  rows.slice(hi+1).forEach(r=>{const f0=String(r[cF]||"").trim(),mack=String(r[cM]||"").trim().replace(/\s+/g," "),t=tel(r[cT]),m=em(r[cE]);
+    if(!f0||/^x+$/i.test(f0))return;
+    if(!mack&&!t&&!m){const last=out[out.length-1];if(last)last.not+=(last.not?"\n":"")+f0;return}
+    const namn=f0.replace(/,?\s*\d{6}\s*\/?\s*[A-Za-z]{2}\b/,"").trim(),k=namn.toLowerCase();
+    const extra=Object.keys(r).filter(c=>c!==cE&&typeof r[c]==="string"&&r[c].indexOf("@")>0).map(c=>em(r[c])).filter(Boolean);
+    if(by[k]){const x=by[k];if(mack&&x.st.indexOf(mack)<0)x.st.push(mack);if(!x.tel&&t)x.tel=t;if(!x.mail&&m)x.mail=m;return}
+    const x={id:"",namn,roll:"Snöröjning",tel:t,mail:m,bil:"",adr:"",kort:"",not:"",akt:true,st:mack?[mack]:[],extra};by[k]=x;out.push(x)});
+  out.forEach(x=>{x.not=(x.st.length?"Snöröjning: "+x.st.join(", "):"Snöröjning")+(x.extra.length?"\nÄven: "+x.extra.join(", "):"")+(x.not?"\n"+x.not:"");delete x.st;delete x.extra});
+  return out}
+document.addEventListener("change",async e=>{if(e.target.id!=="pexl"||!S.bundle||S.bundle.role!=="admin")return;const f=e.target.files&&e.target.files[0];if(!f)return;
+  try{S.pe.imp=snoKontakter(await xlsxRows(f));S.pe.msg=""}catch(err){S.pe.imp=null;S.pe.msg="Kunde inte läsa filen: "+err.message}render()});
 function renderPers(){
   const P=S.pe,list=(S.pers.list||[]).slice().sort((a,b)=>(a.namn||"").localeCompare(b.namn||"","sv")),q=P.q.trim().toLowerCase();
   const inp='style="font:inherit;font-size:16px;padding:9px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--fg);width:100%"';
@@ -1686,6 +1716,9 @@ function renderPers(){
   if(S.pers.ok&&!P.seedDone&&!P.seedNone){if(P.seed===undefined&&!P.seedBusy){P.seedBusy=true;fetch("data/kontakter-seed.bin",{cache:"no-store"}).then(async r=>{if(!r.ok)throw 0;P.seed=(await openPlan(new Uint8Array(await r.arrayBuffer()))).filter(x=>x&&x.namn)}).catch(()=>{P.seedNone=true;P.seed=null}).finally(()=>{P.seedBusy=false;render()})}
     const td=persTodo(S.pers.list||[],P.seed||[]),nw=td.nw,up=td.up;
     if(nw.length||up.length)h+='<div class="card" style="border-color:var(--blue)"><b>'+(nw.length?nw.length+' nya kontakter från PDF:en':'')+(nw.length&&up.length?' och ':'')+(up.length?up.length+' att komplettera med telefon och e-post':'')+'</b><div class="muted" style="font-size:14px;margin:4px 0 8px">'+nw.concat(up).map(x=>esc(x.namn)).join(", ")+'</div><button class="btn go" data-pe="kseed">Lägg in och komplettera</button></div>'}
+  {const im=P.imp,td2=im?persTodo(S.pers.list||[],im):null;
+    h+='<div class="card"><b>Importera kontakter från Excel</b><div class="muted" style="font-size:14px;margin:4px 0 8px">Välj en .xlsx med kolumnerna Mack, Företag, tel och mejl (t.ex. snöröjarlistan). Priser läses inte in.</div><input type="file" id="pexl" accept=".xlsx">'+
+    (im?(td2.nw.length||td2.up.length?'<div style="margin-top:10px"><b>'+td2.nw.length+' nya'+(td2.up.length?' och '+td2.up.length+' att komplettera':'')+'</b><div class="muted" style="font-size:14px;margin:4px 0 8px">'+td2.nw.concat(td2.up).map(x=>esc(x.namn)+(x.tel?' · '+esc(x.tel):'')).join("<br>")+'</div><button class="btn go" data-pe="kimp">Lägg in som Snöröjning</button></div>':'<div class="muted" style="margin-top:8px">Alla kontakter i filen finns redan.</div>'):'')+'</div>'}
   h+='<div class="card" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between"><div class="chips">'+["alla"].concat(ROLLER).map(r=>'<button class="chip" data-pe="roll" data-k="'+esc(r)+'"'+(P.roll===r?' aria-current="date"':'')+'>'+(r==="alla"?"Alla":esc(r))+' <span>'+(r==="alla"?list.length:list.filter(x=>x.roll===r).length)+'</span></button>').join("")+'</div><span style="display:flex;gap:8px;flex-wrap:wrap"><input id="peq" placeholder="Sök namn, telefon…" value="'+esc(P.q)+'" '+inp.replace("width:100%","width:200px")+'><button class="btn go" data-pe="new">+ Lägg till person</button></span></div>';
   if(P.f){const F=P.f,cars=(S.bundle.planCars||[]);
     const fld=(l,x)=>'<label class="muted" style="font-size:14px;display:flex;flex-direction:column;gap:4px;flex:1;min-width:200px">'+l+x+'</label>';
@@ -1711,6 +1744,8 @@ document.addEventListener("click",async e=>{const t=e.target.closest("[data-pe]"
   if(a==="del"){if(P.del!==t.dataset.id){P.del=t.dataset.id;render();return}P.del=null;try{await savePers(l=>{const i=l.findIndex(y=>y.id===t.dataset.id);if(i>=0)l.splice(i,1)});P.msg="✓ Borttagen."}catch(err){P.msg="⚠ Kunde inte ta bort: "+err.message}render();return}
   if(a==="seed"){const mk=(n,b)=>({id:"p"+Math.random().toString(36).slice(2,9),namn:n,roll:"Chaufför",tel:"",mail:"",bil:b,adr:"",kort:"",not:"",akt:true});
     try{await savePers(l=>{if(l.length)return;(S.bundle.planCars||[]).forEach(c=>{if(c.driver)l.push(mk(c.driver,c.name))})});P.msg="✓ Inlagda."}catch(err){P.msg="⚠ "+err.message}render();return}
+  if(a==="kimp"){const im=P.imp||[];const td0=persTodo(S.pers.list||[],im);if(!td0.nw.length&&!td0.up.length)return;t.disabled=true;let nn=0,uu=0;
+    try{await savePers(l=>{nn=0;uu=0;im.forEach(x=>{const i=persIdx(l,x);if(i<0){l.push(Object.assign({},x,{id:"p"+Math.random().toString(36).slice(2,9)}));nn++}else{const f=persFill(l[i],x);if(f.length){f.forEach(k=>{l[i][k]=x[k]});uu++}}})});P.imp=null;P.msg="✓ "+nn+" nya kontakter inlagda, "+uu+" kompletterade."}catch(err){P.msg="Kunde inte lägga in kontakterna: "+err.message}render();return}
   if(a==="kseed"){const td0=persTodo(S.pers.list||[],P.seed||[]);if(!td0.nw.length&&!td0.up.length)return;t.disabled=true;let nn=0,uu=0;
     try{await savePers(l=>{nn=0;uu=0;(P.seed||[]).forEach(x=>{const i=persIdx(l,x);if(i<0){l.push(Object.assign({id:"p"+Math.random().toString(36).slice(2,9)},x));nn++}else{const f=persFill(l[i],x);if(f.length){f.forEach(k=>{l[i][k]=x[k]});uu++}}})});P.msg="✓ "+nn+" nya kontakter inlagda, "+uu+" kompletterade."}catch(err){P.msg="Kunde inte lägga in kontakterna: "+err.message}render();return}
   if(a==="save"){const F=P.f;if(!F)return;F.namn=(F.namn||"").trim();if(!F.namn){F.err="Skriv ett namn.";render();return}
